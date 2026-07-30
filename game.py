@@ -8,7 +8,12 @@ print("Я загадал число от 1 до 52. Попробуй угада�
 
 # Этот цикл повторяется, пока игрок не угадает
 while True:
-    guess = int(input("Твой вариант: "))
+    try:
+        guess = int(input("Твой вариант: "))
+    except ValueError:
+        print("Это не число! Попробуй ещё раз.")
+        continue
+
     attempts = attempts + 1
 
     if guess < secret:
