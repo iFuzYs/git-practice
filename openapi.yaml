@@ -1,0 +1,195 @@
+openapi: 3.0.3
+
+info:
+  title: CS Match Stats API
+  description: Статистика матчей и команд по Counter-Strike.
+  version: 1.0.0
+
+servers:
+  - url: https://api.example.com/v1
+    description: Production
+
+paths:
+  /matches:
+    get:
+      summary: Список матчей
+      description: Возвращает матчи с постраничной навигацией.
+      operationId: listMatches
+      tags: [Matches]
+      parameters:
+        - name: status
+          in: query
+          description: Фильтр по статусу матча
+          required: false
+          schema:
+            $ref: '#/components/schemas/MatchStatus'
+        - name: eventId
+          in: query
+          description: Идентификатор турнира
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Сколько записей вернуть
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Смещение от начала выборки
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /matches/{matchId}:
+    get:
+      summary: Детали матча
+      operationId: getMatch
+      tags: [Matches]
+      parameters:
+        - name: matchId
+          in: path
+          description: Идентификатор матча
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Match'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  schemas:
+    MatchStatus:
+      type: string
+      description: Статус матча
+      enum:
+        - upcoming
+        - live
+        - finished
+
+    Team:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          example: t-navi
+        name:
+          type: string
+          example: Natus Vincere
+        worldRanking:
+          type: integer
+          description: Место в мировом рейтинге на момент матча
+          example: 4
+
+    MapResult:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: Mirage
+        pickedBy:
+          type: string
+          description: Идентификатор команды, выбравшей карту
+          example: t-navi
+        roundsTeam1:
+          type: integer
+          example: 13
+        roundsTeam2:
+          type: integer
+          example: 9
+
+    Match:
+      type: object
+      required: [id, status, startsAt, teams]
+      properties:
+        id:
+          type: string
+          example: m-2026-0731-01
+        status:
+          $ref: '#/components/schemas/MatchStatus'
+        startsAt:
+          type: string
+          format: date-time
+          example: '2026-07-31T18:00:00Z'
+        eventName:
+          type: string
+          example: IEM Cologne 2026
+        format:
+          type: string
+          description: Формат серии
+          enum: [bo1, bo3, bo5]
+          example: bo3
+        teams:
+          type: array
+          description: Две команды, всегда в порядке team1, team2
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/Team'
+        maps:
+          type: array
+          description: Результаты по картам. Пустой массив, если матч ещё не начался.
+          items:
+            $ref: '#/components/schemas/MapResult'
+
+    MatchList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Match'
+        total:
+          type: integer
+          description: Всего записей, подходящих под фильтр
+          example: 137
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: INVALID_PARAMETER
+        message:
+          type: string
+          example: Параметр limit должен быть от 1 до 100
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
