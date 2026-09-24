@@ -100,4 +100,4 @@
 ## Проверки в CI
 
 - **OpenAPI lint** ([workflow](../.github/workflows/openapi-lint.yml)). На каждый pull request [Spectral](https://github.com/stoplightio/spectral) проверяет спецификацию по правилам [.spectral.yaml](../.spectral.yaml): стандартный набор `spectral:oas` и собственные правила стиля (camelCase для `operationId`, kebab-case для путей). Сборку роняют и ошибки, и предупреждения.
-- **API docs** ([workflow](../.github/workflows/api-docs.yml)). После merge в `main` Swagger UI со свежей спецификацией публикуется на GitHub Pages.
+- **GitHub Pages** ([workflow](../.github/workflows/pages.yml)). После merge в `main` Swagger UI со свежей спецификацией публикуется на GitHub Pages.

@@ -1,0 +1,6 @@
+# Python
+__pycache__/
+
+# Локальные файлы FACEIT-дашборда (см. faceit-dashboard/README.md)
+faceit-data.json
+preview/
