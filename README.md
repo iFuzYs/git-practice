@@ -1,0 +1,31 @@
+# Практика системного анализа
+
+Артефакты системного аналитика в формате docs-as-code: всё в Markdown и mermaid, диаграммы рендерятся прямо на GitHub, изменения проходят через pull request, контракты API проверяются в CI.
+
+## Кейсы
+
+### CS Match Stats API
+
+Публичный API статистики матчей Counter-Strike 2 — от проблемы и требований до контракта и архитектурных решений.
+
+- [Обзор кейса](cs-match-stats/README.md): проблема, стейкхолдеры, скоуп, нефункциональные требования, открытые вопросы
+- [Документация API (Swagger UI)](https://ifuzys.github.io/git-practice/)
+- Артефакты: [user stories с критериями в Gherkin](cs-match-stats/user-stories.md) · [C4](cs-match-stats/architecture.md) · [ER-модель](cs-match-stats/data-model.md) · [диаграмма состояний](cs-match-stats/match-lifecycle.md) · [sequence](cs-match-stats/match-flow.md) · [OpenAPI 3.0](cs-match-stats/openapi.yaml) · [ADR](cs-match-stats/adr/)
+
+### Заказ такси
+
+Процесс заказа такси от ввода адреса до оплаты.
+
+- [Sequence-диаграмма](taxi-order-flow.md): обмен сообщениями между сервисами
+- [BPMN 2.0](taxi-order-bpmn.md): участники, решения и варианты завершения процесса
+
+## Автоматические проверки
+
+| Workflow | Когда запускается | Что делает |
+|---|---|---|
+| [OpenAPI lint](.github/workflows/openapi-lint.yml) | Pull request и push в `main` с изменениями спецификаций | Spectral проверяет `openapi.yaml` по правилам [.spectral.yaml](.spectral.yaml) |
+| [API docs](.github/workflows/api-docs.yml) | Push в `main` | Публикует Swagger UI на GitHub Pages |
+
+## Песочница
+
+[hello.txt](hello.txt) и [game.py](game.py) (игра «Угадай число») — первые шаги с Git.

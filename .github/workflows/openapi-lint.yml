@@ -1,0 +1,32 @@
+name: OpenAPI lint
+
+on:
+  pull_request:
+    paths:
+      - '**/openapi.yaml'
+      - '.spectral.yaml'
+      - '.github/workflows/openapi-lint.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**/openapi.yaml'
+      - '.spectral.yaml'
+      - '.github/workflows/openapi-lint.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  spectral:
+    name: Spectral
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # --fail-severity=warn: сборку роняют и ошибки, и предупреждения.
+      - name: Проверить спецификации
+        run: npx --yes @stoplight/spectral-cli@6 lint "**/openapi.yaml" --fail-severity=warn

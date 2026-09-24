@@ -1,0 +1,30 @@
+# Правила проверки OpenAPI-спецификаций.
+# Запускается в CI: .github/workflows/openapi-lint.yml
+# Локально: npx @stoplight/spectral-cli lint cs-match-stats/openapi.yaml
+
+extends:
+  - spectral:oas
+
+rules:
+  # Из operationId генерируются имена методов в клиентах: listMatches(), getMatch().
+  operation-id-camel-case:
+    description: operationId пишется в camelCase
+    message: "{{description}}: {{value}}"
+    severity: error
+    given: $.paths[*][get,put,post,delete,patch,options,head,trace].operationId
+    then:
+      function: casing
+      functionOptions:
+        type: camel
+
+  # Единый стиль URL: /match-maps, а не /matchMaps или /match_maps.
+  paths-kebab-case:
+    description: Сегменты пути пишутся в kebab-case
+    message: "{{description}}: {{property}}"
+    severity: error
+    given: $.paths
+    then:
+      field: "@key"
+      function: pattern
+      functionOptions:
+        match: "^(/([a-z0-9]+(-[a-z0-9]+)*|\\{[a-zA-Z]+\\}))+$"
