@@ -71,13 +71,20 @@ add_executable(coastline
     ${EMBED_CPP})
 target_link_libraries(coastline PRIVATE coastline_core raylib)
 
+# веб-сборка одним файлом (wasm внутри HTML) — для публикации страницей
+option(COASTLINE_SINGLE_FILE "Build the web version as one self-contained HTML file" OFF)
+
 if(EMSCRIPTEN)
     set_target_properties(coastline PROPERTIES SUFFIX ".html")
+    # пересобирать страницу при изменении HTML-оболочек
+    set_property(TARGET coastline APPEND PROPERTY LINK_DEPENDS ${CMAKE_SOURCE_DIR}/web/shell.html ${CMAKE_SOURCE_DIR}/web/artifact_shell.html)
     target_link_options(coastline PRIVATE
         -sUSE_GLFW=3 -sMAX_WEBGL_VERSION=2 -sMIN_WEBGL_VERSION=2
         -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=2097152 -sINITIAL_MEMORY=134217728
         -sEXPORTED_FUNCTIONS=['_main','_cl_cmd','_malloc','_free'] -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPF32']
-        --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html)
+        $<IF:$<BOOL:${COASTLINE_SINGLE_FILE}>,-sSINGLE_FILE=1,-sSINGLE_FILE=0>
+        $<$<BOOL:${COASTLINE_SINGLE_FILE}>:-sSINGLE_FILE_BINARY_ENCODE=0>
+        --shell-file ${CMAKE_SOURCE_DIR}/web/$<IF:$<BOOL:${COASTLINE_SINGLE_FILE}>,artifact_shell.html,shell.html>)
 else()
     if(MSVC)
         # без консольного окна в релизе

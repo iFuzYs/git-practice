@@ -961,7 +961,8 @@ void Renderer::render(Scene& sc) {
     V3 cp{sc.cam.position.x, sc.cam.position.y, sc.cam.position.z};
     V3 ct{sc.cam.target.x, sc.cam.target.y, sc.cam.target.z};
     float nearP = (float)rlGetCullDistanceNear(), farP = (float)rlGetCullDistanceFar();
-    float aspect = (float)GetRenderWidth() / std::max(1, GetRenderHeight());
+    // соотношение сторон как у BeginMode3D (в вебе render-размер не обновляется при ресайзе)
+    float aspect = (float)GetScreenWidth() / std::max(1, GetScreenHeight());
     view_ = MatrixLookAt(sc.cam.position, sc.cam.target, sc.cam.up);
     proj_ = MatrixPerspective(sc.cam.fovy * DEG2RAD, aspect, nearP, farP);
     vp_ = MatrixMultiply(view_, proj_);
