@@ -51,7 +51,7 @@ flowchart TB
     end
     style cms fill:transparent,stroke:#1168bd,stroke-width:2px,stroke-dasharray:6 4
 
-    clients -- "GET /matches<br/>GET /matches/{matchId}<br/>[HTTPS, JSON]" --> api
+    clients -- "GET /matches<br/>GET /matches/{matchId}<br/>GET /events<br/>[HTTPS, JSON]" --> api
     api -- "Читает<br/>[SQL]" --> db
     feed -- "События матча<br/>[вебхуки, JSON]" --> ingest
     ingest -- "Пишет матчи, карты, статусы<br/>[SQL]" --> db
