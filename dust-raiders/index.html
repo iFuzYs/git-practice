@@ -24,6 +24,7 @@ button{font-family:inherit}
 #game{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none}
 body.playing #game{cursor:none}
 .layer{position:fixed;inset:0;pointer-events:none}
+body.post #vignette,body.post #grain{display:none}
 #vignette{background:radial-gradient(ellipse at center,rgba(0,0,0,0) 58%,rgba(24,12,2,.42) 100%)}
 #grain{opacity:.07;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
 #hurt{opacity:0;background:radial-gradient(ellipse at center,rgba(150,0,0,0) 42%,rgba(190,24,10,.7) 100%)}
@@ -297,6 +298,7 @@ body.playing #hud{display:block}
     <div><div class="logo">DUST<span>RAIDERS</span></div></div>
     <div class="logo-sub">Карта: Космопорт</div>
     <p class="lore">Машины Роя пришли с орбиты и выжгли побережье. Заброшенный космопорт теперь кишит дронами, а на складах ещё лежит то, за что наверху хорошо платят. Спуститесь, наберите лута и успейте к лифту до того, как машины возьмут вас в кольцо.</p>
+    <p class="lore"><b style="color:var(--ink)">Машины охраняют свои участки.</b> Они замечают только тех, кто подошёл близко. Глаз машины подскажет: бирюзовый — спокойна, жёлтый — что-то заметила, красный — атакует. Пригнитесь (C), и вас заметят позже.</p>
     <div class="mcard"><h3>СНАРЯЖЕНИЕ НА РЕЙД</h3><div class="kits" id="kits"></div></div>
     <div class="menu-actions"><button class="btn" id="startBtn">Начать рейд</button><button class="btn ghost" id="settingsBtn">Настройки</button></div>
     <div class="touch-warn">Для игры нужны клавиатура и мышь.</div>
@@ -407,6 +409,7 @@ scene.background = FOG_COLOR.clone();
 
 function applyQuality() {
   const hi = settings.quality === 'high';
+  if (POST.rt) applyHDR(hi && renderer.capabilities.isWebGL2);
   renderer.setPixelRatio(hi ? Math.min(devicePixelRatio, 1.5) : Math.min(devicePixelRatio, 1) * 0.8);
   renderer.setSize(innerWidth, innerHeight, false);
   if (sun) {
@@ -417,12 +420,14 @@ function applyQuality() {
     }
   }
   updateParticleScale();
+  resizePost();
 }
 function onResize() {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight, false);
   updateParticleScale();
+  resizePost();
 }
 addEventListener('resize', onResize);
 
@@ -698,7 +703,7 @@ const MAT = {
   arcDark: std(0x2d3033, { map: texMetal, roughness: 0.45, metalness: 0.65 }),
   arcOrange: std(0xe56a1f, { map: texMetal, roughness: 0.5, metalness: 0.2 }),
   arcWreck: std(0x3a3632, { map: texMetal, roughness: 0.8, metalness: 0.5 }),
-  core: std(0x301008, { emissive: 0xff5a1a, emissiveIntensity: 1.6, roughness: 0.4 }),
+  core: std(0x301008, { emissive: 0xff5a1a, emissiveIntensity: 2.2, roughness: 0.4 }),
   screen: std(0x0d1a18, { emissive: 0x39d8b0, emissiveIntensity: 0.9, roughness: 0.3 }),
   screenAmber: std(0x1a120a, { emissive: 0xffa43a, emissiveIntensity: 0.8, roughness: 0.3 }),
   lampOn: basic(0xfff1d6),
@@ -708,7 +713,25 @@ const MAT = {
   glowTeal: basic(0x46f0dc),
   glowBlue: basic(0x6ab8ff),
 };
-const CONTAINER_MATS = [0xb5532b, 0x2e7c83, 0xd8c9a3, 0x9c2f2a, 0x3d5e8a, 0xd99a2b, 0x5b6b3f].map(c => std(c, { map: texCorr, roughness: 0.72, metalness: 0.25 }));
+const CONTAINER_MATS = [0xb5532b, 0x2e7c83, 0xd8c9a3, 0x9c2f2a, 0x3d5e8a, 0xd99a2b, 0x5b6b3f].map(c => std(c, { map: texCorr, bumpMap: texCorr, bumpScale: 3, roughness: 0.72, metalness: 0.25 }));
+for (const m of [MAT.corrGray, MAT.corrCream, MAT.corrRust]) { m.bumpMap = texCorr; m.bumpScale = 3; }
+for (const m of [MAT.concrete, MAT.concreteDark, MAT.pad]) { m.bumpMap = m.map; m.bumpScale = 1.2; }
+for (const m of [MAT.steelRed, MAT.steelGray, MAT.steelDark, MAT.rust, MAT.rocket, MAT.white, MAT.arcBody, MAT.arcDark]) { m.bumpMap = m.map; m.bumpScale = 0.6; }
+// рябь на песке
+const texSandN = (() => {
+  const S = 256, c = makeCanvas(S), H = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = x / S, v = y / S, w = tfbm(u * 4, v * 4, 4, 3);
+    H[y * S + x] = Math.sin((v * 10 + w * 2.2 + tnoise(u * 3, v * 3, 3) * 0.8) * TAU) * 0.6 + tfbm(u * 32, v * 32, 32, 2) * 0.5;
+  }
+  paintPixels(c, (x, y, s, o) => {
+    const hx = H[y * S + (x + 1) % S] - H[y * S + (x + S - 1) % S], hy = H[((y + 1) % S) * S + x] - H[((y + S - 1) % S) * S + x];
+    const nx = -hx * 1.6, ny = -hy * 1.6, l = Math.hypot(nx, ny, 1);
+    o[0] = (nx / l * 0.5 + 0.5) * 255; o[1] = (ny / l * 0.5 + 0.5) * 255; o[2] = (1 / l * 0.5 + 0.5) * 255;
+  });
+  return toTex(c, false);
+})();
+MAT.terrain.normalMap = texSandN; MAT.terrain.normalScale.set(0.55, 0.55);
 
 /* =====================================================================
    Геометрия с UV в метрах и статический батчинг
@@ -1249,7 +1272,7 @@ function lampPost(x, z, h = 9, yaw = 0) {
   beam(x, y + h - 0.2, z, x + fx * 1.6, y + h, z + fz * 1.6, 0.08, MAT.steelGray);
   put(boxGeo(0.7, 0.18, 0.35, 1), MAT.steelDark, x + fx * 1.7, y + h - 0.05, z + fz * 1.7, yaw);
   put(boxGeo(0.55, 0.04, 0.25, 1), MAT.lampOn, x + fx * 1.7, y + h - 0.16, z + fz * 1.7, yaw, 0, 0, false);
-  glow(x + fx * 1.7, y + h - 0.3, z + fz * 1.7, 0xffd9a0, 2.2);
+  glow(x + fx * 1.7, y + h - 0.3, z + fz * 1.7, 0xffd9a0, 1.3);
 }
 function vehicle(x, z, ry, color = MAT.orange, kind = 'truck') {
   const g = new THREE.Group();
@@ -1894,10 +1917,10 @@ function buildStaticGlows() {
   geo.setAttribute('color', new THREE.Float32BufferAttribute(GLOWS.col, 3));
   geo.setAttribute('size', new THREE.Float32BufferAttribute(GLOWS.size, 1));
   const pts = new THREE.Points(geo, new THREE.ShaderMaterial({
-    uniforms: { map: { value: texGlow }, uScale: PART_SCALE },
+    uniforms: { map: { value: texGlow }, uScale: PART_SCALE, boost: HDR_BOOST },
     vertexShader: `attribute float size; attribute vec3 color; varying vec3 vC; uniform float uScale;
       void main(){ vC = color; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = size * uScale / -mv.z; gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `uniform sampler2D map; varying vec3 vC; void main(){ float a = texture2D(map, gl_PointCoord).a; gl_FragColor = vec4(vC * a * 1.3, 1.0); }`,
+    fragmentShader: `uniform sampler2D map; uniform float boost; varying vec3 vC; void main(){ float a = texture2D(map, gl_PointCoord).a; gl_FragColor = vec4(vC * a * (0.6 + boost * 0.3), 1.0); }`,
     blending: THREE.AdditiveBlending, depthWrite: false, transparent: true
   }));
   pts.frustumCulled = false;
@@ -1954,14 +1977,14 @@ class ParticleSystem {
     g.setAttribute('size', new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
     this.geo = g;
     const mat = new THREE.ShaderMaterial({
-      uniforms: { map: { value: map }, uScale: PART_SCALE, fogColor: { value: FOG_COLOR }, fogDensity: { value: scene.fog.density } },
+      uniforms: { map: { value: map }, uScale: PART_SCALE, boost: HDR_BOOST, fogColor: { value: FOG_COLOR }, fogDensity: { value: scene.fog.density } },
       vertexShader: `attribute float size; attribute float alpha; attribute vec3 color; varying float vA; varying vec3 vC; varying float vFog;
         uniform float uScale; uniform float fogDensity;
         void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = min(size * uScale / max(-mv.z, 0.1), 900.0);
           gl_Position = projectionMatrix * mv; vA = alpha; vC = color; float d = -mv.z * fogDensity; vFog = 1.0 - exp(-d*d); }`,
       fragmentShader: additive
-        ? `uniform sampler2D map; varying float vA; varying vec3 vC; varying float vFog;
-           void main(){ float a = texture2D(map, gl_PointCoord).a * vA * (1.0 - vFog); if (a < 0.003) discard; gl_FragColor = vec4(vC * a, 1.0); }`
+        ? `uniform sampler2D map; uniform float boost; varying float vA; varying vec3 vC; varying float vFog;
+           void main(){ float a = texture2D(map, gl_PointCoord).a * vA * (1.0 - vFog); if (a < 0.003) discard; gl_FragColor = vec4(vC * a * boost, 1.0); }`
         : `uniform sampler2D map; uniform vec3 fogColor; varying float vA; varying vec3 vC; varying float vFog;
            void main(){ vec4 t = texture2D(map, gl_PointCoord); float a = t.a * vA; if (a < 0.01) discard; gl_FragColor = vec4(mix(vC, fogColor, vFog), a); }`,
       transparent: true, depthWrite: false,
@@ -2021,7 +2044,7 @@ function tracer(from, to, color = 0xffd08a, width = 0.035, life = 0.07) {
     t = { mesh: m, life: 0, max: 0, w: 0 }; TRACERS.push(t);
   }
   const d = from.distanceTo(to);
-  t.mesh.visible = true; t.mesh.material.color.set(color); t.mesh.material.opacity = 1;
+  t.mesh.visible = true; t.mesh.material.color.set(color).multiplyScalar(HDR_BOOST.value); t.mesh.material.opacity = 1;
   t.mesh.position.copy(from); t.mesh.lookAt(to);
   t.mesh.scale.set(width, width, d);
   t.life = life; t.max = life; t.w = width;
@@ -2342,12 +2365,12 @@ const ITEMS = {
   gem: { name: 'Лунный кристалл', cat: 'loot', icon: 'gem', stack: 1, value: 1350, rarity: 'legendary', desc: 'Образец лунного грунта в кристалле.' },
 };
 const WEAPONS = {
-  hairpin: { name: '«Шпилька»', cls: 'Пистолет', ammo: 'ammo_light', dmg: 16, rpm: 420, auto: false, mag: 12, reload: 1.3, spread: [0.02, 0.006], bloom: 0.012, maxBloom: 0.04, recoil: 0.012, pen: 0.1, range: 50, noise: 45, sound: 'pistol', rarity: 'common', adsFov: 58, shake: 0.08 },
-  stitcher: { name: '«Стрекот»', cls: 'Пистолет-пулемёт', ammo: 'ammo_light', dmg: 10, rpm: 900, auto: true, mag: 32, reload: 1.9, spread: [0.03, 0.012], bloom: 0.004, maxBloom: 0.035, recoil: 0.008, pen: 0.1, range: 40, noise: 55, sound: 'smg', rarity: 'common', adsFov: 58, shake: 0.06 },
-  rattler: { name: '«Гремучник»', cls: 'Штурмовая винтовка', ammo: 'ammo_medium', dmg: 17, rpm: 610, auto: true, mag: 28, reload: 2.3, spread: [0.026, 0.004], bloom: 0.004, maxBloom: 0.03, recoil: 0.012, pen: 0.3, range: 90, noise: 70, sound: 'rifle', rarity: 'uncommon', adsFov: 52, shake: 0.09 },
-  toro: { name: '«Бык»', cls: 'Дробовик', ammo: 'ammo_shell', dmg: 12, pellets: 9, rpm: 72, auto: false, mag: 5, reload: 2.6, spread: [0.075, 0.055], bloom: 0, maxBloom: 0, recoil: 0.05, pen: 0.15, range: 22, noise: 75, sound: 'shotgun', rarity: 'uncommon', adsFov: 60, shake: 0.3, flash: 1.6 },
-  ferro: { name: '«Кувалда»', cls: 'Тяжёлая винтовка', ammo: 'ammo_heavy', dmg: 78, rpm: 55, auto: false, mag: 1, reload: 1.3, spread: [0.022, 0.0015], bloom: 0, maxBloom: 0, recoil: 0.06, pen: 0.85, range: 140, noise: 90, sound: 'heavy', rarity: 'rare', adsFov: 50, shake: 0.35, flash: 1.5, tracer: 0xffe2b0 },
-  osprey: { name: '«Сапсан»', cls: 'Снайперская винтовка', ammo: 'ammo_heavy', dmg: 64, rpm: 48, auto: false, mag: 5, reload: 2.8, spread: [0.045, 0.0004], bloom: 0, maxBloom: 0, recoil: 0.05, pen: 0.65, range: 300, noise: 100, sound: 'sniper', rarity: 'epic', adsFov: 16, scope: true, shake: 0.25, flash: 1.2, tracer: 0xfff0d0 },
+  hairpin: { name: '«Шпилька»', cls: 'Пистолет', ammo: 'ammo_light', dmg: 16, rpm: 420, auto: false, mag: 12, reload: 1.3, spread: [0.02, 0.006], bloom: 0.012, maxBloom: 0.04, recoil: 0.012, pen: 0.1, range: 50, noise: 18, sound: 'pistol', rarity: 'common', adsFov: 58, shake: 0.08 },
+  stitcher: { name: '«Стрекот»', cls: 'Пистолет-пулемёт', ammo: 'ammo_light', dmg: 10, rpm: 900, auto: true, mag: 32, reload: 1.9, spread: [0.03, 0.012], bloom: 0.004, maxBloom: 0.035, recoil: 0.008, pen: 0.1, range: 40, noise: 22, sound: 'smg', rarity: 'common', adsFov: 58, shake: 0.06 },
+  rattler: { name: '«Гремучник»', cls: 'Штурмовая винтовка', ammo: 'ammo_medium', dmg: 17, rpm: 610, auto: true, mag: 28, reload: 2.3, spread: [0.026, 0.004], bloom: 0.004, maxBloom: 0.03, recoil: 0.012, pen: 0.3, range: 90, noise: 28, sound: 'rifle', rarity: 'uncommon', adsFov: 52, shake: 0.09 },
+  toro: { name: '«Бык»', cls: 'Дробовик', ammo: 'ammo_shell', dmg: 12, pellets: 9, rpm: 72, auto: false, mag: 5, reload: 2.6, spread: [0.075, 0.055], bloom: 0, maxBloom: 0, recoil: 0.05, pen: 0.15, range: 22, noise: 28, sound: 'shotgun', rarity: 'uncommon', adsFov: 60, shake: 0.3, flash: 1.6 },
+  ferro: { name: '«Кувалда»', cls: 'Тяжёлая винтовка', ammo: 'ammo_heavy', dmg: 78, rpm: 55, auto: false, mag: 1, reload: 1.3, spread: [0.022, 0.0015], bloom: 0, maxBloom: 0, recoil: 0.06, pen: 0.85, range: 140, noise: 34, sound: 'heavy', rarity: 'rare', adsFov: 50, shake: 0.35, flash: 1.5, tracer: 0xffe2b0 },
+  osprey: { name: '«Сапсан»', cls: 'Снайперская винтовка', ammo: 'ammo_heavy', dmg: 64, rpm: 48, auto: false, mag: 5, reload: 2.8, spread: [0.045, 0.0004], bloom: 0, maxBloom: 0, recoil: 0.05, pen: 0.65, range: 300, noise: 38, sound: 'sniper', rarity: 'epic', adsFov: 16, scope: true, shake: 0.25, flash: 1.2, tracer: 0xfff0d0 },
 };
 const WEAPON_DROP = [['rattler', 5], ['toro', 4], ['stitcher', 4], ['ferro', 2.5], ['osprey', 1.4], ['hairpin', 2]];
 const LOOT_TABLES = {
@@ -2544,35 +2567,55 @@ function updatePlayerModel(dt) {
   const m = PM;
   m.root.position.copy(P.pos);
   const hs = Math.hypot(P.vel.x, P.vel.z);
-  let target = P.yaw;
-  if ((P.sprinting || P.roll > 0) && hs > 0.5) target = Math.atan2(-P.vel.x, -P.vel.z);
+  const moveYaw = Math.atan2(-P.vel.x, -P.vel.z);
+  // В бою корпус смотрит за камерой, иначе рейдер разворачивается по ходу движения
+  const combat = P.ads || P.aimingGrenade || mouse.left || GAME.time - (P.lastShot || -99) < 1.2;
+  let target = P.modelYaw, rate = 10;
   if (P.climbing) target = P.climbing.L.yaw;
-  P.modelYaw = dampAngle(P.modelYaw, target, P.roll > 0 ? 20 : 12, dt);
+  else if (P.zipping) target = moveYaw;
+  else if (P.roll > 0 && hs > 0.5) { target = moveYaw; rate = 20; }
+  else if (combat) { target = P.yaw; rate = 18; }
+  else if (hs > 0.8) target = moveYaw;
+  P.modelYaw = dampAngle(P.modelYaw, target, rate, dt);
   m.root.rotation.y = P.modelYaw;
   P.crouchT = damp(P.crouchT, P.crouch ? 1 : 0, 12, dt);
-  // походка
-  const fwdSpeed = -(P.vel.x * -Math.sin(P.modelYaw) + P.vel.z * -Math.cos(P.modelYaw)) < 0 ? 1 : -1;
-  P.animPhase += hs * dt * (P.sprinting ? 2.6 : 3.3) * fwdSpeed;
-  const amp = P.onGround ? clamp(hs / 5, 0, 1) * (P.sprinting ? 1.0 : 0.65) : 0;
-  const ph = P.animPhase, c = P.crouchT;
+  // таз поворачивается в сторону шага (стрейф), при шаге назад ноги идут в обратную сторону
+  let rel = hs > 0.6 && P.onGround && !P.climbing && !P.zipping && P.roll <= 0 ? angDiff(P.modelYaw, moveYaw) : 0, dir = 1;
+  if (Math.abs(rel) > Math.PI * 0.62) { rel = angDiff(0, rel + Math.PI); dir = -1; }
+  m.hips.rotation.y = dampAngle(m.hips.rotation.y, clamp(rel, -1.1, 1.1), 10, dt);
+  // походка: амплитуда бедра и частота шагов согласованы с длиной шага, чтобы стопы не скользили
+  const c = P.crouchT;
+  const amp = P.onGround ? clamp(hs / 5.5, 0, 1) * (P.sprinting ? 0.8 : 0.52) * (1 - c * 0.35) : 0;
+  const stride = Math.max(0.25, 2 * 0.9 * Math.sin(Math.max(amp, 0.05)));
+  P.animPhase += hs * dt * Math.PI / stride * dir;
+  const ph = P.animPhase;
   for (let i = 0; i < 2; i++) {
     const s = i ? -1 : 1, L = m.legs[i];
-    let hipX = Math.sin(ph) * amp * s - c * 0.9, knX = Math.max(0, Math.sin(ph + (i ? Math.PI : 0) - 0.6)) * amp * 1.3 + c * 1.7;
-    if (!P.onGround && !P.zipping) { hipX = -0.5 + i * 0.3; knX = 0.9; }
-    if (P.zipping) { hipX = -0.3; knX = 0.4; }
-    if (P.climbing) { const cp = Math.sin(P.climbing.anim * 4 + i * Math.PI); hipX = -0.6 + cp * 0.4; knX = 1 + cp * 0.4; }
-    L.hip.rotation.x = damp(L.hip.rotation.x, hipX, 20, dt);
-    L.knee.rotation.x = damp(L.knee.rotation.x, knX, 20, dt);
+    const swing = Math.sin(ph) * s, fwd = Math.cos(ph) * s;
+    // бедро вперёд — положительный угол; колено сгибается назад — отрицательный
+    let hipX = swing * amp + c * 1.1;
+    let knX = -(Math.max(0, fwd) * amp * 1.6 + amp * 0.2) - c * 1.9;
+    if (!P.onGround && !P.zipping && !P.climbing) { hipX = i ? 0.15 : 0.7; knX = i ? -0.5 : -1.1; }
+    if (P.zipping) { hipX = 0.35 + s * 0.08; knX = -0.5; }
+    if (P.climbing) { const cp = Math.sin(P.climbing.anim * 4 + i * Math.PI); hipX = 0.55 + cp * 0.35; knX = -1.0 - cp * 0.35; }
+    L.hip.rotation.x = damp(L.hip.rotation.x, hipX, 22, dt);
+    L.knee.rotation.x = damp(L.knee.rotation.x, knX, 22, dt);
   }
-  m.hips.position.y = 0.95 - c * 0.36 + Math.abs(Math.sin(ph)) * 0.04 * amp;
-  m.hips.rotation.x = damp(m.hips.rotation.x, c * 0.25, 10, dt);
-  // верх: наклон за прицелом
-  const aimPitch = P.climbing || P.zipping ? 0 : P.sprinting ? -0.25 : clamp(P.pitch + P.recoil, -1.1, 1.1);
-  m.spine.rotation.x = damp(m.spine.rotation.x, aimPitch * 0.55 + (P.sprinting ? -0.15 : 0) - c * 0.2, 14, dt);
-  m.neck.rotation.x = damp(m.neck.rotation.x, aimPitch * 0.4, 14, dt);
-  m.spine.rotation.y = damp(m.spine.rotation.y, P.sprinting ? 0 : Math.sin(ph) * 0.05 * amp, 10, dt);
+  // таз опускается, когда ноги расставлены, и поднимается на середине шага
+  const drop = 0.9 * (1 - Math.cos(amp * Math.abs(Math.sin(ph))));
+  m.hips.position.y = damp(m.hips.position.y, 0.95 - c * 0.36 - drop * 0.85, 25, dt);
+  m.hips.rotation.x = damp(m.hips.rotation.x, 0, 10, dt);
+  m.hips.rotation.z = damp(m.hips.rotation.z, Math.sin(ph) * amp * 0.08, 10, dt);
+  // верх: наклон за прицелом, при беге — вперёд; спина компенсирует поворот таза
+  const aimPitch = P.climbing || P.zipping ? 0 : P.sprinting ? 0 : combat ? clamp(P.pitch + P.recoil, -1.1, 1.1) : clamp(P.pitch, -0.4, 0.4) * 0.4;
+  const lean = P.sprinting ? -0.28 : -hs * 0.015;
+  m.spine.rotation.x = damp(m.spine.rotation.x, aimPitch * 0.55 + lean - c * 0.25, 14, dt);
+  m.spine.rotation.y = damp(m.spine.rotation.y, -m.hips.rotation.y + (P.sprinting ? Math.sin(ph) * 0.12 : Math.sin(ph) * 0.04 * amp), 12, dt);
+  m.neck.rotation.x = damp(m.neck.rotation.x, aimPitch * 0.4 - lean * 0.6, 14, dt);
+  // голова смотрит туда же, куда камера
+  m.neck.rotation.y = damp(m.neck.rotation.y, combat || P.climbing ? 0 : clamp(angDiff(P.modelYaw, P.yaw), -1.0, 1.0) * 0.7, 8, dt);
   // оружие и руки
-  const lower = P.sprinting || P.reload > 0 || P.switchT > 0 || P.channel || P.climbing || P.zipping ? 1 : 0;
+  const lower = P.sprinting || P.reload > 0 || P.switchT > 0 || P.channel || P.climbing || P.zipping ? 1 : combat ? 0 : 0.35;
   const gh = m.gunHold;
   gh.position.set(lerp(0.14, 0.12, P.adsT), lerp(0.36, 0.42, P.adsT) - lower * 0.12, lerp(-0.3, -0.34, P.adsT) + lower * 0.08);
   gh.rotation.x = damp(gh.rotation.x, lower * -0.7 + (P.reload > 0 ? Math.sin(P.reload * 8) * 0.1 : 0), 14, dt);
@@ -2726,7 +2769,7 @@ function updatePlayer(dt) {
   moveBody(P, dt);
   if (!wasGround && P.onGround) {
     const fall = P.fallStart - P.pos.y;
-    if (fall > 1.5) { SFX.land(); fxDust(P.pos, 4); if (fall > 3) emitNoise(P.pos, 14); }
+    if (fall > 1.5) { SFX.land(); fxDust(P.pos, 4); if (fall > 3) emitNoise(P.pos, 8); }
     if (P.landImpact > 15) { hurtPlayer((P.landImpact - 15) * 5.5, null, 'fall'); }
     P.landImpact = 0;
   }
@@ -2740,7 +2783,7 @@ function updatePlayer(dt) {
   if (P.onGround && hs > 1) {
     P.stepT += hs * dt;
     const stride = P.sprinting ? 2.1 : 1.6;
-    if (P.stepT > stride) { P.stepT = 0; SFX.step(null, P.sprinting); if (P.sprinting) emitNoise(P.pos, 16); }
+    if (P.stepT > stride) { P.stepT = 0; SFX.step(null, P.sprinting); if (P.sprinting) emitNoise(P.pos, 7); }
   }
 }
 function updateClimb(dt) {
@@ -2833,7 +2876,7 @@ function getMuzzle(out) {
 function fireWeapon() {
   const w = curW(), def = WEAPONS[w.id];
   if (w.mag <= 0) { SFX.empty(); P.fireCd = 0.3; if (reserveFor(def) > 0) startReload(); return; }
-  w.mag--; P.fireCd = 60 / def.rpm;
+  w.mag--; P.fireCd = 60 / def.rpm; P.lastShot = GAME.time;
   cancelChannel();
   const muzzle = getMuzzle(_mz), fwd = camForward(_cf), cam = camera.position;
   _ch.set(P.pos.x, P.pos.y + P.eyeH - 0.2, P.pos.z);
@@ -2878,8 +2921,9 @@ function updateWeapons(dt) {
   P.ads = mouse.right && !P.sprinting && P.roll <= 0 && !panels && !P.climbing && !P.zipping && !!def;
   P.adsT = damp(P.adsT, P.ads ? 1 : 0, 14, dt);
   const canShoot = def && !P.channel && P.reload <= 0 && P.switchT <= 0 && P.roll <= 0 && !panels && !P.climbing && !P.zipping && !P.aimingGrenade;
-  if (canShoot && mouse.left && P.fireCd <= 0 && (def.auto || mouse.leftPressed)) fireWeapon();
-  mouse.leftPressed = false;
+  const facing = Math.abs(angDiff(P.modelYaw, P.yaw)) < 0.5;
+  if (canShoot && facing && mouse.left && P.fireCd <= 0 && (def.auto || mouse.leftPressed)) { fireWeapon(); mouse.leftPressed = false; }
+  if (!mouse.left) mouse.leftPressed = false;
   // расходники
   if (P.channel) {
     P.channel.t += dt;
@@ -3025,7 +3069,7 @@ function updateGrenades(dt) {
       g.activeT -= dt;
       if (g.type === 'g_smoke' && Math.random() < dt * 30) PFX_SMOKE.spawn(g.pos.x + rand(-0.3, 0.3), g.pos.y + 0.2, g.pos.z + rand(-0.3, 0.3), rand(-2.2, 2.2), rand(0.6, 1.8), rand(-2.2, 2.2), rand(4, 6), 1.2, 7, 0.82, 0.8, 0.77, 0.8, 0.45, -0.05, 0.1);
       if (g.type === 'g_lure') {
-        if (Math.floor(g.activeT * 3) !== Math.floor((g.activeT + dt) * 3)) { SFX.beep(g.pos, true); PFX_ADD.spawn(g.pos.x, g.pos.y + 0.2, g.pos.z, 0, 0, 0, 0.2, 1.2, 0.6, 1, 0.8, 0.2, 1); emitNoise(g.pos, 80, true); }
+        if (Math.floor(g.activeT * 3) !== Math.floor((g.activeT + dt) * 3)) { SFX.beep(g.pos, true); PFX_ADD.spawn(g.pos.x, g.pos.y + 0.2, g.pos.z, 0, 0, 0, 0.2, 1.2, 0.6, 1, 0.8, 0.2, 1); emitNoise(g.pos, 45, true); }
       }
       if (g.activeT <= 0) {
         scene.remove(g.mesh); grenades.splice(i, 1);
@@ -3052,7 +3096,7 @@ function detonate(g) {
   if (g.type === 'g_frag') explode(p, 7.5, 95, 'player');
   else if (g.type === 'g_impact') explode(p, 5.5, 70, 'player');
   else if (g.type === 'g_emp') {
-    fxEmp(p, 9); SFX.emp(p); emitNoise(p, 50);
+    fxEmp(p, 9); SFX.emp(p); emitNoise(p, 20);
     for (const e of enemies) { if (e.dead || e.prop) continue; const d = e.pos.distanceTo(p); if (d < 10) { e.stunned(6); e.damage(25, e.pos, 'player'); } }
     if (P.pos.distanceTo(p) < 8) { $('empfx').style.opacity = 1; setTimeout(() => $('empfx').style.opacity = 0, 400); }
   }
@@ -3062,16 +3106,16 @@ function detonate(g) {
    ===================================================================== */
 const enemies = [];
 const EDEF = {
-  wasp: { name: 'Оса', fem: true, hp: 70, kind: 'flyer', speed: 7.5, accel: 2.6, sight: 50, alt: [5, 9], pref: [11, 19], burst: 3, interval: 0.1, cd: 1.8, dmg: 6, bolt: 56, spread: 0.035, loot: 'wasp', bound: 1.3 },
-  hornet: { name: 'Шершень', hp: 210, kind: 'flyer', speed: 5.6, accel: 2.0, sight: 60, alt: [6, 11], pref: [15, 25], burst: 5, interval: 0.12, cd: 2.4, dmg: 9, bolt: 62, spread: 0.03, heavy: true, loot: 'hornet', bound: 1.9 },
-  rocketeer: { name: 'Ракетчик', hp: 360, kind: 'flyer', speed: 4.4, accel: 1.4, sight: 78, alt: [13, 19], pref: [26, 40], burst: 2, interval: 0.5, cd: 4.8, dmg: 32, bolt: 24, spread: 0.02, rocket: true, loot: 'rocketeer', bound: 2.7 },
-  tick: { name: 'Клещ', hp: 30, kind: 'tick', speed: 8.2, sight: 24, loot: 'small', bound: 0.8 },
-  pop: { name: 'Хлопун', hp: 45, kind: 'pop', speed: 5.2, sight: 30, loot: 'small', bound: 0.9 },
-  sentinel: { name: 'Страж', hp: 170, kind: 'turret', sight: 95, dmg: 38, charge: 1.35, cd: 2.8, loot: 'sentinel', bound: 1.4 },
-  bastion: { name: 'Бастион', hp: 1600, kind: 'bastion', speed: 2.2, sight: 70, burst: 16, interval: 0.085, cd: 2.4, dmg: 6, bolt: 72, spread: 0.05, heavy: true, loot: 'bastion', bound: 4.6 },
+  wasp: { name: 'Оса', fem: true, hp: 70, kind: 'flyer', speed: 7.5, accel: 2.6, aggro: 26, leash: 55, alt: [5, 9], pref: [11, 19], burst: 3, interval: 0.1, cd: 2.0, dmg: 5, bolt: 56, spread: 0.04, loot: 'wasp', bound: 1.3 },
+  hornet: { name: 'Шершень', hp: 210, kind: 'flyer', speed: 5.6, accel: 2.0, aggro: 30, leash: 60, alt: [6, 11], pref: [15, 25], burst: 5, interval: 0.12, cd: 2.6, dmg: 7, bolt: 62, spread: 0.035, heavy: true, loot: 'hornet', bound: 1.9 },
+  rocketeer: { name: 'Ракетчик', hp: 360, kind: 'flyer', speed: 4.4, accel: 1.4, aggro: 36, leash: 70, alt: [13, 19], pref: [26, 40], burst: 2, interval: 0.5, cd: 5.2, dmg: 26, bolt: 24, spread: 0.02, rocket: true, loot: 'rocketeer', bound: 2.7 },
+  tick: { name: 'Клещ', hp: 30, kind: 'tick', speed: 7.6, aggro: 14, leash: 35, loot: 'small', bound: 0.8 },
+  pop: { name: 'Хлопун', hp: 45, kind: 'pop', speed: 5.2, aggro: 16, leash: 35, loot: 'small', bound: 0.9 },
+  sentinel: { name: 'Страж', hp: 170, kind: 'turret', aggro: 55, leash: 1e9, dmg: 30, charge: 1.6, cd: 3.2, loot: 'sentinel', bound: 1.4 },
+  bastion: { name: 'Бастион', hp: 1600, kind: 'bastion', speed: 2.2, aggro: 38, leash: 50, burst: 14, interval: 0.09, cd: 2.8, dmg: 5, bolt: 72, spread: 0.05, heavy: true, loot: 'bastion', bound: 4.6 },
   barrel: { name: 'Бочка', hp: 18, kind: 'prop', bound: 0.8 }
 };
-const EYE_IDLE = 0xffa53a, EYE_SUSP = 0xffe04a, EYE_COMBAT = 0xff2a14, EYE_STUN = 0x6ab8ff;
+const EYE_IDLE = 0x3fd8c6, EYE_SUSP = 0xffd23a, EYE_COMBAT = 0xff2a14, EYE_STUN = 0x6ab8ff;
 const _e1 = new V3(), _e2 = new V3(), _f1 = new V3(), _f2 = new V3(), _s1 = new V3(), _s2 = new V3(), _s3 = new V3();
 const _cq2 = [];
 function glowSprite(color, size) {
@@ -3114,7 +3158,7 @@ class Enemy {
     this.fireCd = rand(1, 2.5); this.burstLeft = 0; this.burstT = 0; this.telegraph = 0;
     this.flashT = 0; this.showBar = 0; this.t = rand(0, 100); this.waitT = 0; this.bound = this.def.bound;
     this.orbit = rand(0, TAU); this.orbitDir = Math.random() < 0.5 ? 1 : -1; this.prefK = Math.random(); this.altK = Math.random();
-    this.wp = null; this.wpT = 0; this.leapCd = 0; this.armT = -1; this.mortarCd = rand(6, 10); this.stompCd = 3;
+    this.wp = null; this.wpT = 0; this.angerT = 0; this.leapCd = 0; this.armT = -1; this.mortarCd = rand(6, 10); this.stompCd = 3;
     this.radius = 0.4; this.height = 0.6; this.step = 0.6; this.onGround = false; this.groundY = 0; this.hitWall = false;
     this.parts = []; this.eyeMats = []; this.spin = []; this.glow = null; this.glowSize = 1;
     this.root = new THREE.Group(); scene.add(this.root);
@@ -3127,7 +3171,11 @@ class Enemy {
   eyeMat() { const m = basic(EYE_IDLE); this.eyeMats.push(m); return m; }
   part(obj, x, y, z, r, mult = 1, armor = 0) { this.parts.push({ obj, off: new V3(x, y, z), r, mult, armor, w: new V3() }); }
   updateParts() { for (const p of this.parts) p.w.copy(p.off).applyMatrix4(p.obj.matrixWorld); }
-  setEye(c, k) { for (const m of this.eyeMats) m.color.setHex(c); if (this.glow) { this.glow.material.color.setHex(c); this.glow.scale.setScalar(this.glowSize * k); } }
+  setEye(c, k) {
+    const b = HDR_BOOST.value * (0.6 + 0.4 * k);
+    for (const m of this.eyeMats) m.color.setHex(c).multiplyScalar(b);
+    if (this.glow) { this.glow.material.color.setHex(c).multiplyScalar(Math.min(b, 2)); this.glow.scale.setScalar(this.glowSize * k); }
+  }
   eyePos(out) { if (this.eyeObj) return this.eyeObj.getWorldPosition(out); return out.copy(this.pos); }
 
   /* ---- модели ---- */
@@ -3277,34 +3325,49 @@ class Enemy {
     this.percT -= dt;
     if (this.percT > 0) return;
     const step = 0.22; this.percT = step;
-    if (!GAME.live || P.dead || this.stun > 0 || P.extracted) { this.canSee = false; if (this.state === 'combat' && !GAME.live) this.state = 'patrol'; return; }
+    if (!GAME.live || P.dead || this.stun > 0 || P.extracted) { this.canSee = false; if (this.state === 'combat' && !GAME.live) this.goHome(); return; }
+    this.angerT -= step;
     const eye = this.eyePos(_e1);
     _e2.set(P.pos.x, P.pos.y + P.height * 0.75, P.pos.z);
     const d = eye.distanceTo(_e2);
-    const range = this.def.sight * (P.crouch ? 0.62 : 1) * (this.state === 'combat' ? 1.4 : 1);
-    this.canSee = d < range && losClear(eye, _e2);
+    // Машина охраняет свою точку: замечает только вблизи, в бою видит дальше
+    const aggro = this.def.aggro * (P.crouch ? 0.65 : 1);
+    const range = this.state === 'combat' ? this.def.aggro * 2.2 : aggro;
+    const inTerritory = this.angerT > 0 || this.playerInTerritory();
+    this.canSee = d < range && inTerritory && losClear(eye, _e2);
     if (this.canSee) {
       this.lastSeen.copy(P.pos); this.lostT = 0;
       if (this.state !== 'combat') {
-        this.aware += step * (d < 12 ? 6 : 1.8 * range / (d + 6));
+        this.aware += step * (d < aggro * 0.4 ? 5 : 1.3);
         if (this.aware >= 1) this.enterCombat();
-        else if (this.state === 'patrol') { this.state = 'suspicious'; this.goal.copy(P.pos); this.waitT = 4; SFX.scan(this.pos); }
+        else if (this.state !== 'suspicious') { this.state = 'suspicious'; this.goal.copy(P.pos); this.waitT = 3; SFX.scan(this.pos); }
       }
+    } else if (this.state === 'combat') {
+      this.lostT += step;
+      if (!inTerritory) this.goHome();
+      else if (this.lostT > 4) { this.state = 'investigate'; this.goal.copy(this.lastSeen); this.waitT = 3; }
     } else {
-      if (this.state === 'combat') { this.lostT += step; if (this.lostT > 7) { this.state = 'investigate'; this.goal.copy(this.lastSeen); this.waitT = 6; } }
-      else { this.aware = Math.max(0, this.aware - step * 0.2); if (this.state === 'suspicious' && this.aware <= 0) this.state = 'patrol'; }
+      this.aware = Math.max(0, this.aware - step * 0.35);
+      if (this.state === 'suspicious' && this.aware <= 0) this.goHome();
     }
   }
+  playerInTerritory() { return Math.hypot(P.pos.x - this.home.x, P.pos.z - this.home.z) < this.def.leash; }
+  goHome() { this.state = this.def.kind === 'turret' ? 'patrol' : 'return'; this.aware = 0; this.lostT = 0; this.burstLeft = 0; this.telegraph = 0; if (this.charge !== undefined) this.charge = -1; }
+  atHome(r) { return Math.hypot(this.pos.x - this.home.x, this.pos.z - this.home.z) < r; }
   enterCombat() {
     const was = this.state;
     this.state = 'combat'; this.aware = 1; this.lostT = 0; this.lastSeen.copy(P.pos);
-    if (was !== 'combat') { SFX.alert(this.pos); this.fireCd = Math.min(this.fireCd, rand(0.6, 1.4)); alertNearby(this.pos, 38); }
+    if (was !== 'combat') {
+      SFX.alert(this.pos); this.fireCd = Math.max(this.fireCd, rand(1.0, 1.8)); alertNearby(this.pos, 16);
+      if (GAME.live && GAME.time - (GAME.spottedT || -99) > 3) { GAME.spottedT = GAME.time; notify(`Вас заметил${this.def.fem ? 'а' : ''}: ${this.def.name}`, 'kill'); }
+    }
   }
   hear(pos, lure) {
-    if (this.state === 'combat' && !lure) return;
-    if (this.state === 'combat' && lure && Math.random() < 0.5) return;
-    this.state = 'investigate'; this.goal.copy(pos).add(_f1.set(rand(-4, 4), 0, rand(-4, 4))); this.waitT = lure ? 10 : 5;
-    this.aware = Math.max(this.aware, 0.35);
+    if (this.state === 'combat') return;
+    // на шум идут только в пределах своей территории
+    if (Math.hypot(pos.x - this.home.x, pos.z - this.home.z) > this.def.leash) return;
+    this.state = 'investigate'; this.goal.copy(pos).add(_f1.set(rand(-3, 3), 0, rand(-3, 3))); this.waitT = lure ? 8 : 4;
+    this.aware = Math.max(this.aware, 0.3);
   }
   stunned(t) { this.stun = Math.max(this.stun, t); this.burstLeft = 0; this.telegraph = 0; if (this.charge !== undefined) this.charge = -1; }
 
@@ -3322,7 +3385,7 @@ class Enemy {
   damage(amount, point, src) {
     if (this.dead) return;
     this.hp -= amount; this.flashT = 0.08; this.showBar = 4;
-    if (src === 'player' && !this.prop) { if (this.state !== 'combat') this.enterCombat(); else this.lastSeen.copy(P.pos); }
+    if (src === 'player' && !this.prop) { this.angerT = 8; if (this.state !== 'combat') this.enterCombat(); else this.lastSeen.copy(P.pos); }
     if (this.hp <= 0) this.die(src);
   }
   die(src) {
@@ -3335,7 +3398,7 @@ class Enemy {
     const p = this.pos;
     if (this.type === 'pop') { explode(p, 5.5, 50, 'env'); }
     else if (this.type === 'barrel') { explode(p.clone().setY(p.y + 0.6), 6.5, 90, src === 'player' ? 'player' : 'env'); spawnDebris(p, 5, 0.3, [MAT.rust, MAT.hazard], 10); return; }
-    else if (this.type === 'tick') { explode(p, 3.4, 30, 'env'); }
+    else if (this.type === 'tick') { explode(p, 3.4, 24, 'env'); }
     else { fxExplosion(p, 1.1 * big); SFX.explosion(p, 0.6 * big); if (this.type === 'bastion') { explode(p, 9, 40, 'env'); camShake(0.8); } }
     spawnDebris(p, Math.round(5 * big), 0.22 * big, [MAT.arcBody, MAT.arcDark, MAT.arcOrange], 7 + big * 2);
     if (this.def.loot) spawnWreck(p, this.def.loot, this.def.name);
@@ -3398,18 +3461,25 @@ class Enemy {
         T.y = Math.max(terrainH(T.x, T.z), src.y) + lerp(D.alt[0], D.alt[1], this.altK) + Math.sin(this.hoverT * 0.8) * 1.2;
       } else { T.copy(this.lastSeen); T.y += D.alt[0] + 1; }
       face = src;
-    } else if (this.state === 'investigate' || this.state === 'suspicious') {
+    } else if (this.state === 'suspicious') {
+      // заметил движение: зависает и смотрит, глаз желтеет — время уйти из виду
+      T.copy(this.pos); speed = 0; face = this.goal;
+    } else if (this.state === 'investigate') {
       T.copy(this.goal); T.y = Math.max(terrainH(T.x, T.z), this.goal.y) + D.alt[0] + 2;
-      speed *= this.state === 'suspicious' ? 0.35 : 0.8;
-      if (this.state === 'suspicious') face = this.goal;
-      if (this.pos.distanceTo(T) < 6) { this.waitT -= dt; this.yaw += dt * 0.8; if (this.waitT <= 0) { this.state = 'patrol'; this.aware = 0; } }
+      speed *= 0.7;
+      if (this.pos.distanceTo(T) < 6) { this.waitT -= dt; this.yaw += dt * 0.8; if (this.waitT <= 0) this.goHome(); }
+    } else if (this.state === 'return') {
+      T.set(this.home.x, terrainH(this.home.x, this.home.z) + lerp(D.alt[0], D.alt[1], this.altK) + 1, this.home.z);
+      speed *= 0.6;
+      if (this.atHome(5)) this.state = 'patrol';
     } else {
-      if (!this.wp || this.pos.distanceTo(this.wp) < 4 || (this.wpT -= dt) < 0) {
-        this.wp = new V3(this.home.x + rand(-45, 45), 0, this.home.z + rand(-45, 45));
-        const ad = Math.sqrt(Math.sqrt(this.wp.x ** 4 + this.wp.z ** 4)); if (ad > 200) this.wp.multiplyScalar(200 / ad);
-        this.wp.y = terrainH(this.wp.x, this.wp.z) + lerp(D.alt[0], D.alt[1], Math.random()) + 2; this.wpT = 25;
+      // держит пост: медленно дрейфует вокруг своей точки и осматривается
+      if (!this.wp || this.pos.distanceTo(this.wp) < 1.5 || (this.wpT -= dt) < 0) {
+        this.wp = new V3(this.home.x + rand(-7, 7), 0, this.home.z + rand(-7, 7));
+        this.wp.y = terrainH(this.wp.x, this.wp.z) + lerp(D.alt[0], D.alt[1], this.altK) + 1; this.wpT = rand(5, 9);
       }
-      T.copy(this.wp); speed *= 0.4;
+      T.copy(this.wp); speed *= 0.18;
+      this.yaw += dt * 0.3 * this.orbitDir;
     }
     _f2.subVectors(T, this.pos);
     const dist = _f2.length();
@@ -3424,7 +3494,7 @@ class Enemy {
     this.avoidWorld();
     // ориентация и наклон
     if (face) this.faceTo(face.x, face.z, 5, dt);
-    else if (Math.hypot(this.vel.x, this.vel.z) > 0.5) this.yaw = dampAngle(this.yaw, Math.atan2(-this.vel.x, -this.vel.z), 3, dt);
+    else if (Math.hypot(this.vel.x, this.vel.z) > 1.5) this.yaw = dampAngle(this.yaw, Math.atan2(-this.vel.x, -this.vel.z), 3, dt);
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
     const vf = -this.vel.x * sy - this.vel.z * cy, vs = this.vel.x * cy - this.vel.z * sy;
     this.body.rotation.x = damp(this.body.rotation.x, -vf * 0.05, 6, dt);
@@ -3503,8 +3573,9 @@ class Enemy {
     let speed = 0, tx = this.pos.x, tz = this.pos.z;
     if (this.stun > 0) speed = 0;
     else if (this.state === 'combat') { tx = this.canSee ? P.pos.x : this.lastSeen.x; tz = this.canSee ? P.pos.z : this.lastSeen.z; speed = this.def.speed; }
-    else if (this.state === 'investigate' || this.state === 'suspicious') { tx = this.goal.x; tz = this.goal.z; speed = this.def.speed * 0.6; if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 2) { this.waitT -= dt; if (this.waitT <= 0) this.state = 'patrol'; } }
-    else { const w = this.wanderTarget(6); tx = w.x; tz = w.z; speed = 1.2; }
+    else if (this.state === 'investigate') { tx = this.goal.x; tz = this.goal.z; speed = this.def.speed * 0.6; if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 2) { this.waitT -= dt; if (this.waitT <= 0) this.goHome(); } }
+    else if (this.state === 'suspicious') { this.faceTo(this.goal.x, this.goal.z, 6, dt); }
+    else if (this.state === 'return') { tx = this.home.x; tz = this.home.z; speed = this.def.speed * 0.5; if (this.atHome(1.5)) this.state = 'patrol'; }
     const d = this.groundMove(dt, tx, tz, speed);
     if (speed > 0.1) this.faceTo(tx, tz, 10, dt);
     if (this.state === 'combat' && this.stun <= 0) {
@@ -3531,8 +3602,8 @@ class Enemy {
       if (this.armT > 0.85) { this.die('self'); return; }
     } else if (this.stun > 0) speed = 0;
     else if (this.state === 'combat') { tx = this.canSee ? P.pos.x : this.lastSeen.x; tz = this.canSee ? P.pos.z : this.lastSeen.z; speed = this.def.speed; }
-    else if (this.state === 'investigate' || this.state === 'suspicious') { tx = this.goal.x; tz = this.goal.z; speed = this.def.speed * 0.5; if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 2) { this.waitT -= dt; if (this.waitT <= 0) this.state = 'patrol'; } }
-    else { const w = this.wanderTarget(10); tx = w.x; tz = w.z; speed = 1.5; }
+    else if (this.state === 'investigate') { tx = this.goal.x; tz = this.goal.z; speed = this.def.speed * 0.5; if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 2) { this.waitT -= dt; if (this.waitT <= 0) this.goHome(); } }
+    else if (this.state === 'return') { tx = this.home.x; tz = this.home.z; speed = this.def.speed * 0.4; if (this.atHome(1.5)) this.state = 'patrol'; }
     this.groundMove(dt, tx, tz, speed);
     const hs = Math.hypot(this.vel.x, this.vel.z);
     if (hs > 0.2) this.yaw = dampAngle(this.yaw, Math.atan2(-this.vel.x, -this.vel.z), 8, dt);
@@ -3553,7 +3624,7 @@ class Enemy {
     } else if (this.state === 'combat' || this.state === 'investigate' || this.state === 'suspicious') {
       const g = this.state === 'combat' ? this.lastSeen : this.goal;
       targetYaw = Math.atan2(-(g.x - this.pos.x), -(g.z - this.pos.z)) - this.yaw;
-      if (this.state !== 'combat') { this.waitT -= dt; if (this.waitT <= 0) this.state = 'patrol'; }
+      if (this.state !== 'combat') { this.waitT -= dt; if (this.waitT <= 0) this.goHome(); }
     } else targetYaw = Math.sin(this.t * 0.45) * 1.3;
     const err = Math.abs(angDiff(this.headYaw, targetYaw));
     this.headYaw = dampAngle(this.headYaw, targetYaw, this.charge > 0 ? 1.2 : 2.4, dt);
@@ -3602,8 +3673,10 @@ class Enemy {
       else if (d < 12) { tx = this.pos.x - (src.x - this.pos.x); tz = this.pos.z - (src.z - this.pos.z); speed = D.speed * 0.7; }
     } else if (this.state === 'investigate' || this.state === 'suspicious') {
       tx = this.goal.x; tz = this.goal.z; speed = D.speed * 0.8; face = this.goal;
-      if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 4) { this.waitT -= dt; speed = 0; if (this.waitT <= 0) this.state = 'patrol'; }
-    } else { const w = this.wanderTarget(28); tx = w.x; tz = w.z; speed = D.speed * 0.6; }
+      if (this.state === 'suspicious') speed = 0;
+      if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 4) { this.waitT -= dt; speed = 0; if (this.waitT <= 0) this.goHome(); }
+    } else if (this.state === 'return') { tx = this.home.x; tz = this.home.z; speed = D.speed * 0.6; if (this.atHome(3)) this.state = 'patrol'; }
+    else { const w = this.wanderTarget(10); tx = w.x; tz = w.z; speed = D.speed * 0.35; }
     const turnErr = face ? this.faceTo(face.x, face.z, 0.9, dt) : (speed > 0 ? this.faceTo(tx, tz, 0.8, dt) : 0);
     if (turnErr > 0.8) speed *= 0.3;
     const prevY = this.pos.y;
@@ -3655,7 +3728,7 @@ class Enemy {
   }
 }
 function alertNearby(pos, r) {
-  for (const e of enemies) if (!e.dead && !e.prop && e.state !== 'combat' && e.pos.distanceTo(pos) < r) { e.state = 'investigate'; e.goal.copy(P.pos); e.waitT = 6; e.aware = Math.max(e.aware, 0.5); }
+  for (const e of enemies) if (!e.dead && !e.prop && e.state !== 'combat' && e.pos.distanceTo(pos) < r) e.hear(P.pos, false);
 }
 function emitNoise(pos, r, lure = false) {
   for (const e of enemies) {
@@ -3757,7 +3830,7 @@ const _x1 = new V3(), _x2 = new V3();
 function explode(p, r, dmg, owner) {
   fxExplosion(p, Math.max(1, r * 0.33));
   SFX.explosion(p, clamp(r / 6, 0.6, 1.6));
-  emitNoise(p, 90);
+  emitNoise(p, 35);
   if (!P.dead && GAME.live) {
     _x1.set(P.pos.x, P.pos.y + 1, P.pos.z);
     const d = _x1.distanceTo(p);
@@ -3960,14 +4033,13 @@ class Extraction {
   reset() { this.state = 'idle'; this.t = 0; this.doorT = 0; this.sirenT = 0; }
   setColor(c, op) {
     const near = smoothstep(6, 35, Math.hypot(camera.position.x - this.mast.x, camera.position.z - this.mast.z));
-    this.lampMat.color.setHex(c); this.lampGlow.material.color.setHex(c); this.beamMat.color.setHex(c); this.beamMat.opacity = op * (0.2 + 0.8 * near); this.screen.material.emissive.setHex(c);
+    this.lampMat.color.setHex(c).multiplyScalar(HDR_BOOST.value); this.lampGlow.material.color.setHex(c); this.beamMat.color.setHex(c); this.beamMat.opacity = op * (0.2 + 0.8 * near); this.screen.material.emissive.setHex(c);
   }
   call() {
     this.state = 'calling'; this.t = 25; this.sirenT = 0;
     notify(`${this.name}: лифт вызван, прибытие через 25 с`, 'info');
-    notify('Шум привлёк машины!', 'kill');
-    emitNoise(this.pos, 150);
-    for (let i = 0; i < 3; i++) spawnReinforcement(this.pos, i === 2 ? 'hornet' : 'wasp');
+    notify('Сирена насторожила машины поблизости', 'kill');
+    emitNoise(this.pos, 45);
   }
   update(dt) {
     const pulseK = 0.5 + Math.sin(GAME.time * 6) * 0.5;
@@ -4001,13 +4073,6 @@ function updateExtractions(dt) {
   }
   if (inZone) { P.extractT += dt; if (P.extractT >= 3) extractSuccess(inZone); }
   else P.extractT = 0;
-}
-function spawnReinforcement(target, type = 'wasp') {
-  const a = rand(0, TAU), r = 215;
-  const e = spawnEnemy(type, Math.cos(a) * r, 28, Math.sin(a) * r);
-  e.state = 'investigate'; e.goal.copy(target); e.waitT = 12; e.aware = 0.6;
-  e.home.copy(target);
-  return e;
 }
 
 /* =====================================================================
@@ -4406,7 +4471,7 @@ function drawMap() {
 /* =====================================================================
    Игровой процесс
    ===================================================================== */
-const GAME = { state: 'loading', paused: false, live: false, time: 0, raidTime: 0, raidLimit: 20 * 60, killsByType: {}, reinfT: 100, heartT: 0, endT: -1, endKind: '' };
+const GAME = { state: 'loading', paused: false, live: false, time: 0, raidTime: 0, raidLimit: 20 * 60, killsByType: {}, heartT: 0, endT: -1, endKind: '' };
 const KITS = {
   scout: { name: 'Разведчик', desc: '«Стрекот» и «Шпилька», дымовые шашки. Быстро и тихо.', weapons: ['stitcher', 'hairpin'], items: [['ammo_light', 150], ['bandage', 3], ['g_smoke', 2], ['g_impact', 1], ['shieldcell', 1]], shield: 40 },
   assault: { name: 'Штурмовик', desc: '«Гремучник» и «Шпилька», осколочные гранаты.', weapons: ['rattler', 'hairpin'], items: [['ammo_medium', 112], ['ammo_light', 36], ['bandage', 2], ['g_frag', 2], ['shieldcell', 1]], shield: 60 },
@@ -4454,7 +4519,7 @@ function startRaid() {
   P.camY = P.pos.y + 1.6;
   PM.root.rotation.set(0, 0, 0);
   setPlayerGun();
-  GAME.killsByType = {}; GAME.raidTime = 0; GAME.reinfT = 100; GAME.endT = -1;
+  GAME.killsByType = {}; GAME.raidTime = 0; GAME.endT = -1;
   GAME.state = 'playing'; GAME.paused = false; GAME.live = true;
   UI.inv = UI.map = false; UI.container = null;
   ['menu', 'pause', 'endScr', 'inv', 'mapOv'].forEach(id => $(id).classList.remove('on'));
@@ -4546,12 +4611,6 @@ function updateRaid(dt) {
   if (GAME.live) {
     GAME.raidTime += dt;
     if (GAME.raidTime >= GAME.raidLimit) { hurtPlayer(9999, null, 'timeout'); P.hp = 0; if (!P.dead) playerDie('timeout'); }
-    GAME.reinfT -= dt;
-    if (GAME.reinfT <= 0) {
-      GAME.reinfT = rand(90, 130);
-      const flyers = enemies.filter(e => !e.dead && e.def.kind === 'flyer').length;
-      if (flyers < 22) { spawnReinforcement(P.pos, 'wasp'); spawnReinforcement(P.pos, Math.random() < 0.3 ? 'hornet' : 'wasp'); notify('Над космопортом новый патруль машин', 'info'); }
-    }
     if (P.hp < 30) { GAME.heartT -= dt; if (GAME.heartT <= 0) { GAME.heartT = 0.95; SFX.heartbeat(); } }
     updatePlayer(dt);
     updateCamera(dt);
@@ -4580,6 +4639,114 @@ function updateMenuCam(dt) {
 }
 
 /* =====================================================================
+   Постобработка: HDR, свечение, тонмаппинг ACES, цветокоррекция
+   ===================================================================== */
+const HDR_BOOST = { value: 1 };
+const POST = { on: false, rt: null, mips: [], scene: new THREE.Scene(), cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), quad: null, strength: 0.9 };
+const FS_VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+const fsMat = (frag, uniforms) => new THREE.ShaderMaterial({ uniforms, vertexShader: FS_VERT, fragmentShader: frag, depthTest: false, depthWrite: false, toneMapped: false });
+const POSTM = {
+  pre: fsMat(`uniform sampler2D tex; uniform vec2 texel; uniform float threshold, knee; varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tex, vUv + texel * vec2(-0.5,-0.5)).rgb + texture2D(tex, vUv + texel * vec2(0.5,-0.5)).rgb
+             + texture2D(tex, vUv + texel * vec2(-0.5,0.5)).rgb + texture2D(tex, vUv + texel * vec2(0.5,0.5)).rgb;
+      c = min(c * 0.25, vec3(40.0));
+      float br = max(c.r, max(c.g, c.b));
+      float soft = clamp(br - threshold + knee, 0.0, 2.0 * knee); soft = soft * soft / (4.0 * knee + 1e-4);
+      gl_FragColor = vec4(c * max(soft, br - threshold) / max(br, 1e-4), 1.0);
+    }`, { tex: { value: null }, texel: { value: new THREE.Vector2() }, threshold: { value: 2.4 }, knee: { value: 1.0 } }),
+  down: fsMat(`uniform sampler2D tex; uniform vec2 texel; varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tex, vUv).rgb * 4.0;
+      c += texture2D(tex, vUv + texel * vec2(-1.0,-1.0)).rgb + texture2D(tex, vUv + texel * vec2(1.0,-1.0)).rgb;
+      c += texture2D(tex, vUv + texel * vec2(-1.0,1.0)).rgb + texture2D(tex, vUv + texel * vec2(1.0,1.0)).rgb;
+      gl_FragColor = vec4(c / 8.0, 1.0);
+    }`, { tex: { value: null }, texel: { value: new THREE.Vector2() } }),
+  up: fsMat(`uniform sampler2D tex; uniform vec2 texel; varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tex, vUv + texel * vec2(-2.0,0.0)).rgb + texture2D(tex, vUv + texel * vec2(2.0,0.0)).rgb
+             + texture2D(tex, vUv + texel * vec2(0.0,-2.0)).rgb + texture2D(tex, vUv + texel * vec2(0.0,2.0)).rgb;
+      c += (texture2D(tex, vUv + texel * vec2(-1.0,1.0)).rgb + texture2D(tex, vUv + texel * vec2(1.0,1.0)).rgb
+          + texture2D(tex, vUv + texel * vec2(-1.0,-1.0)).rgb + texture2D(tex, vUv + texel * vec2(1.0,-1.0)).rgb) * 2.0;
+      gl_FragColor = vec4(c / 12.0, 1.0);
+    }`, { tex: { value: null }, texel: { value: new THREE.Vector2() } }),
+  comp: fsMat(`uniform sampler2D tScene, tBloom; uniform float strength, exposure, time, dmg; uniform vec2 res; varying vec2 vUv;
+    vec3 rrtFit(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
+    vec3 aces(vec3 c){
+      const mat3 I = mat3(vec3(0.59719, 0.07600, 0.02840), vec3(0.35458, 0.90834, 0.13383), vec3(0.04823, 0.01566, 0.83777));
+      const mat3 O = mat3(vec3(1.60475, -0.10208, -0.00327), vec3(-0.53108, 1.10813, -0.07276), vec3(-0.07367, -0.00605, 1.07602));
+      c = I * (c / 0.6); c = rrtFit(c); return clamp(O * c, 0.0, 1.0);
+    }
+    vec3 toSRGB(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+    float hash(vec2 p){ p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }
+    void main(){
+      vec2 d = vUv - 0.5; float r2 = dot(d, d);
+      vec2 ca = d * r2 * (0.004 + dmg * 0.03);
+      vec3 col = vec3(texture2D(tScene, vUv + ca).r, texture2D(tScene, vUv).g, texture2D(tScene, vUv - ca).b);
+      col += texture2D(tBloom, vUv).rgb * strength;
+      col = aces(col * exposure);
+      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(col, col * vec3(0.9, 1.0, 1.08), (1.0 - smoothstep(0.0, 0.45, l)) * 0.55);
+      col = mix(col, col * vec3(1.06, 1.0, 0.92), smoothstep(0.4, 1.0, l) * 0.5);
+      col = clamp(mix(vec3(l), col, 1.12), 0.0, 1.0);
+      col = toSRGB(col);
+      col = mix(col, col * col * (3.0 - 2.0 * col), 0.2);
+      col *= 1.0 - smoothstep(0.38, 0.9, sqrt(r2) * 1.25) * 0.5;
+      col += (hash(vUv * res + fract(time) * 97.0) - 0.5) * 0.028;
+      gl_FragColor = vec4(col, 1.0);
+    }`, { tScene: { value: null }, tBloom: { value: null }, strength: { value: 0.75 }, exposure: { value: 1.05 }, time: { value: 0 }, dmg: { value: 0 }, res: { value: new THREE.Vector2() } }),
+};
+POST.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), POSTM.comp);
+POST.quad.frustumCulled = false; POST.scene.add(POST.quad);
+const HDR_MATS = [];
+function setupPost() {
+  const rtOpt = { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
+  POST.rt = new THREE.WebGLRenderTarget(4, 4, Object.assign({ samples: 4 }, rtOpt));
+  for (let i = 0; i < 6; i++) POST.mips.push(new THREE.WebGLRenderTarget(4, 4, Object.assign({ depthBuffer: false }, rtOpt)));
+  for (const [m, k] of [[MAT.lampOn, 5], [MAT.glowRed, 6], [MAT.glowAmber, 5], [MAT.glowGreen, 6], [MAT.glowTeal, 6], [MAT.glowBlue, 6], [boltMatN, 7], [boltMatH, 7]]) HDR_MATS.push({ m, k, base: m.color.clone() });
+  for (const [m, k] of [[MAT.screen, 3.5], [MAT.screenAmber, 3.5], [MAT.core, 3]]) HDR_MATS.push({ m, k, base: m.emissiveIntensity, emi: true });
+}
+function resizePost() {
+  if (!POST.rt) return;
+  const v = renderer.getDrawingBufferSize(new THREE.Vector2());
+  POST.rt.setSize(v.x, v.y);
+  let w = v.x, h = v.y;
+  for (const m of POST.mips) { w = Math.max(1, w >> 1); h = Math.max(1, h >> 1); m.setSize(w, h); }
+  POSTM.comp.uniforms.res.value.set(v.x, v.y);
+}
+function applyHDR(on) {
+  POST.on = on;
+  HDR_BOOST.value = on ? 4 : 1;
+  for (const h of HDR_MATS) { if (h.emi) h.m.emissiveIntensity = h.base * (on ? h.k : 1); else h.m.color.copy(h.base).multiplyScalar(on ? h.k : 1); }
+  document.body.classList.toggle('post', on);
+}
+function fsPass(mat, src, target, texelSrc) {
+  mat.uniforms.tex.value = src.texture;
+  mat.uniforms.texel.value.set(1 / texelSrc.width, 1 / texelSrc.height);
+  POST.quad.material = mat;
+  renderer.setRenderTarget(target);
+  renderer.render(POST.scene, POST.cam);
+}
+function renderFrame(dt) {
+  if (!POST.on) { renderer.setRenderTarget(null); renderer.render(scene, camera); return; }
+  renderer.setRenderTarget(POST.rt);
+  renderer.render(scene, camera);
+  const ac = renderer.autoClear;
+  const M = POST.mips;
+  fsPass(POSTM.pre, POST.rt, M[0], POST.rt);
+  for (let i = 1; i < M.length; i++) fsPass(POSTM.down, M[i - 1], M[i], M[i - 1]);
+  POSTM.up.blending = THREE.AdditiveBlending; renderer.autoClear = false;
+  for (let i = M.length - 1; i > 0; i--) fsPass(POSTM.up, M[i], M[i - 1], M[i]);
+  renderer.autoClear = ac;
+  const U = POSTM.comp.uniforms;
+  U.tScene.value = POST.rt.texture; U.tBloom.value = M[0].texture; U.strength.value = POST.strength;
+  U.time.value = GAME.time; U.dmg.value = GAME.state === 'playing' ? clamp(1 - (GAME.time - P.lastHurt) * 2, 0, 1) : 0;
+  POST.quad.material = POSTM.comp;
+  renderer.setRenderTarget(null);
+  renderer.render(POST.scene, POST.cam);
+}
+
+/* =====================================================================
    Главный цикл и запуск
    ===================================================================== */
 let lastT = performance.now();
@@ -4588,7 +4755,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, Math.max(0, (now - lastT) / 1000)); lastT = now;
   simulate(dt);
-  renderer.render(scene, camera);
+  renderFrame(dt);
   if (GAME.state === 'playing') updateHUD(dt);
 }
 function simulate(dt) {
@@ -4630,6 +4797,7 @@ async function init() {
   for (const s of LOOT_SPOTS) new Lootable(s.type, s.x, s.y, s.z, s.ry);
   for (const d of EXTRACT_DEFS) new Extraction(d);
   PM = buildRaider(); PM.root.visible = false;
+  setupPost();
   buildStaticMap();
   applyQuality(); onResize(); compassW = $('compass').clientWidth || 520;
   msg('Готово'); await wait(30);
