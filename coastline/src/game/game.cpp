@@ -378,8 +378,8 @@ void Game::readControls(float dt, Controls& c) {
     }
     float lim = pad ? 1.0f : mixf(1.0f, 0.5f, clamp01(kmh / 220.0f));
     c.steer = clampf(steerSmooth * lim, -1, 1);
-    if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_LEFT_SHIFT)) pendingShiftUp_ = true;
-    if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_LEFT_CONTROL)) pendingShiftDown_ = true;
+    if (ui.pressed(KEY_E) || ui.pressed(KEY_LEFT_SHIFT)) pendingShiftUp_ = true;
+    if (ui.pressed(KEY_Q) || ui.pressed(KEY_LEFT_CONTROL)) pendingShiftDown_ = true;
     c.shiftUp = pendingShiftUp_;
     c.shiftDown = pendingShiftDown_;
 }
@@ -411,8 +411,8 @@ void Game::frame() {
         return;
     }
     stateT += dt;
-    if (IsKeyPressed(KEY_F3)) debugHud = !debugHud;
-    if (IsKeyPressed(KEY_F1)) showHelp = !showHelp;
+    if (ui.pressed(KEY_F3)) debugHud = !debugHud;
+    if (ui.pressed(KEY_F1)) showHelp = !showHelp;
 
     bool world3d = true;
     switch (state) {
@@ -490,8 +490,8 @@ void Game::frame() {
 
 void Game::updateDrive(float dt) {
     // системные клавиши
-    bool pauseKey = IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_P) || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_RIGHT));
-    bool mapKey = IsKeyPressed(KEY_M) || IsKeyPressed(KEY_TAB) || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_LEFT));
+    bool pauseKey = ui.pressed(KEY_ESCAPE) || ui.pressed(KEY_P) || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_RIGHT));
+    bool mapKey = ui.pressed(KEY_M) || ui.pressed(KEY_TAB) || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_LEFT));
     if (pauseKey) {
         tab = state == GS_RACE ? TAB_SETTINGS : TAB_MAP;
         enterState(GS_PAUSE);
@@ -504,17 +504,17 @@ void Game::updateDrive(float dt) {
         audio.play(SFX_UI_OK);
         return;
     }
-    if (IsKeyPressed(KEY_C) || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_1))) {
+    if (ui.pressed(KEY_C) || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_1))) {
         rig.mode = (rig.mode + 1) % CAM_COUNT;
         prof.settings.camera = rig.mode;
         ui.toast("Камера: " + std::string(camModeName(rig.mode)), "", pal::cyan, 1.2f);
     }
-    if (IsKeyPressed(KEY_L)) {
+    if (ui.pressed(KEY_L)) {
         lightsManual = true;
         lightsOn = !lightsOn;
     }
-    if (IsKeyPressed(KEY_T)) resetToRoad();
-    if (state == GS_DRIVE && nearEvent >= 0 && (IsKeyPressed(KEY_ENTER) || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_FACE_UP) && false))) {
+    if (ui.pressed(KEY_T)) resetToRoad();
+    if (state == GS_DRIVE && nearEvent >= 0 && (ui.pressed(KEY_ENTER) || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_FACE_UP) && false))) {
         enterState(GS_EVENT_CARD);
         audio.play(SFX_UI_OK);
         return;
@@ -949,10 +949,10 @@ void Game::computeLight(FrameLight& L) const {
         {0.0f, {0.2f, 0.26f, 0.42f}, {0.032f, 0.042f, 0.075f}, {0.018f, 0.018f, 0.024f}, {0.004f, 0.007f, 0.02f}, {0.028f, 0.042f, 0.075f}, 0.0009f, 1.12f, 1},
         {4.8f, {0.2f, 0.26f, 0.42f}, {0.032f, 0.042f, 0.075f}, {0.018f, 0.018f, 0.024f}, {0.004f, 0.007f, 0.02f}, {0.028f, 0.042f, 0.075f}, 0.0009f, 1.12f, 1},
         {5.9f, {1.1f, 0.55f, 0.38f}, {0.17f, 0.15f, 0.22f}, {0.07f, 0.055f, 0.055f}, {0.07f, 0.11f, 0.28f}, {0.8f, 0.44f, 0.36f}, 0.001f, 1.12f, 0.35f},
-        {7.2f, {2.3f, 1.7f, 1.15f}, {0.34f, 0.37f, 0.5f}, {0.15f, 0.13f, 0.1f}, {0.15f, 0.31f, 0.68f}, {0.84f, 0.72f, 0.64f}, 0.0008f, 0.86f, 0},
-        {12.0f, {2.9f, 2.76f, 2.5f}, {0.4f, 0.5f, 0.7f}, {0.19f, 0.18f, 0.14f}, {0.12f, 0.33f, 0.8f}, {0.62f, 0.77f, 0.95f}, 0.00055f, 0.8f, 0},
-        {17.0f, {2.8f, 2.45f, 2.0f}, {0.39f, 0.46f, 0.63f}, {0.19f, 0.16f, 0.12f}, {0.13f, 0.32f, 0.75f}, {0.72f, 0.78f, 0.9f}, 0.0006f, 0.82f, 0},
-        {19.2f, {2.6f, 1.45f, 0.72f}, {0.33f, 0.3f, 0.36f}, {0.17f, 0.12f, 0.09f}, {0.16f, 0.22f, 0.5f}, {1.0f, 0.6f, 0.38f}, 0.0008f, 0.92f, 0},
+        {7.2f, {2.3f, 1.7f, 1.15f}, {0.34f, 0.37f, 0.5f}, {0.15f, 0.13f, 0.1f}, {0.15f, 0.31f, 0.68f}, {0.84f, 0.72f, 0.64f}, 0.0006f, 0.86f, 0},
+        {12.0f, {2.9f, 2.76f, 2.5f}, {0.4f, 0.5f, 0.7f}, {0.19f, 0.18f, 0.14f}, {0.12f, 0.33f, 0.8f}, {0.62f, 0.77f, 0.95f}, 0.00038f, 0.8f, 0},
+        {17.0f, {2.8f, 2.45f, 2.0f}, {0.39f, 0.46f, 0.63f}, {0.19f, 0.16f, 0.12f}, {0.13f, 0.32f, 0.75f}, {0.72f, 0.78f, 0.9f}, 0.00042f, 0.82f, 0},
+        {19.2f, {2.6f, 1.45f, 0.72f}, {0.33f, 0.3f, 0.36f}, {0.17f, 0.12f, 0.09f}, {0.16f, 0.22f, 0.5f}, {1.0f, 0.6f, 0.38f}, 0.0006f, 0.92f, 0},
         {20.2f, {0.9f, 0.36f, 0.22f}, {0.15f, 0.11f, 0.17f}, {0.06f, 0.04f, 0.04f}, {0.06f, 0.08f, 0.22f}, {0.6f, 0.3f, 0.28f}, 0.0009f, 1.15f, 0.45f},
         {21.4f, {0.2f, 0.26f, 0.42f}, {0.032f, 0.042f, 0.075f}, {0.018f, 0.018f, 0.024f}, {0.004f, 0.007f, 0.02f}, {0.028f, 0.042f, 0.075f}, 0.0009f, 1.12f, 1},
         {24.0f, {0.2f, 0.26f, 0.42f}, {0.032f, 0.042f, 0.075f}, {0.018f, 0.018f, 0.024f}, {0.004f, 0.007f, 0.02f}, {0.028f, 0.042f, 0.075f}, 0.0009f, 1.12f, 1},

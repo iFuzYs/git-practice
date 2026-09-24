@@ -136,7 +136,7 @@ vec3 localLights(vec3 wp, vec3 n) {
         float dist = length(d);
         vec3 L = d / max(dist, 0.001);
         float cone = smoothstep(0.80, 0.96, dot(L, uHeadDir));
-        float att = 1.0 / (1.0 + dist * dist * 0.0035);
+        float att = 1.0 / (1.0 + dist * dist * 0.011);
         acc += vec3(1.0, 0.94, 0.82) * cone * att * max(dot(n, -L), 0.0) * uHeadOn * 5.0;
     }
     for (int i = 0; i < 8; i++) {
@@ -263,7 +263,8 @@ void main() {
         // ночью часть окон светится
         vec2 wid = floor(vUV * vec2(2.0, 1.0));
         float r = fract(sin(dot(wid + floor(vPos.xz * 0.05), vec2(12.9898, 78.233))) * 43758.5453);
-        if (r > 0.45) emit = vec3(1.0, 0.78, 0.5) * win * uNight * 1.6 * (0.5 + r * 0.5);
+        float glassK = style > 2.5 ? 0.35 : 1.0;  // стеклянные башни светятся слабее
+        if (r > 0.72) emit = vec3(1.0, 0.72, 0.42) * win * uNight * 0.32 * glassK * (0.5 + r * 0.5);
     } else if (a < 149.5) {
         emit = toLin(col) * 2.2;            // всегда светится
     } else if (a < 199.5) {

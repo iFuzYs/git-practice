@@ -89,4 +89,8 @@ else()
     target_link_libraries(coastline_tests PRIVATE coastline_core)
     enable_testing()
     add_test(NAME sim COMMAND coastline_tests)
+    # отладочная карта острова в PNG: cmake --build build --target coastline_mapdump
+    add_executable(coastline_mapdump EXCLUDE_FROM_ALL tests/map_dump.cpp)
+    target_include_directories(coastline_mapdump PRIVATE ${raylib_SOURCE_DIR}/src/external)
+    target_link_libraries(coastline_mapdump PRIVATE coastline_core)
 endif()

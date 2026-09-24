@@ -47,6 +47,11 @@ public:
     Nav nav;
     bool gamepad = false;              // последнее устройство ввода — геймпад
     float time = 0;
+    int okCount = 0;  // отладка: сколько раз срабатывало «подтвердить»
+    // нажатие за кадр: учитывает и очередь raylib, чтобы короткие нажатия
+    // не терялись при низкой частоте кадров
+    bool pressed(int key) const;
+    std::vector<int> keysThisFrame;
 
     void init();
     void unload();

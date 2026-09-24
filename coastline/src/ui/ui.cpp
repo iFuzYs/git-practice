@@ -80,15 +80,17 @@ void Ui::beginFrame(float dt) {
     lastMouse_ = m;
     click = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     wheel = GetMouseWheelMove();
+    keysThisFrame.clear();
+    for (int k = GetKeyPressed(); k != 0; k = GetKeyPressed()) keysThisFrame.push_back(k);
     nav = Nav{};
-    nav.up = IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP) || IsKeyPressed(KEY_W);
-    nav.down = IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN) || IsKeyPressed(KEY_S);
-    nav.left = IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT) || IsKeyPressed(KEY_A);
-    nav.right = IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT) || IsKeyPressed(KEY_D);
-    nav.ok = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) || IsKeyPressed(KEY_SPACE);
-    nav.back = IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE);
-    nav.tabL = IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_PAGE_UP);
-    nav.tabR = IsKeyPressed(KEY_E) || IsKeyPressed(KEY_PAGE_DOWN);
+    nav.up = pressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP) || pressed(KEY_W);
+    nav.down = pressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN) || pressed(KEY_S);
+    nav.left = pressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT) || pressed(KEY_A);
+    nav.right = pressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT) || pressed(KEY_D);
+    nav.ok = pressed(KEY_ENTER) || pressed(KEY_KP_ENTER) || pressed(KEY_SPACE);
+    nav.back = pressed(KEY_ESCAPE) || pressed(KEY_BACKSPACE);
+    nav.tabL = pressed(KEY_Q) || pressed(KEY_PAGE_UP);
+    nav.tabR = pressed(KEY_E) || pressed(KEY_PAGE_DOWN);
     if (IsGamepadAvailable(0)) {
         static float repeatT = 0;
         static int lastDir = 0;
@@ -110,7 +112,8 @@ void Ui::beginFrame(float dt) {
         nav.tabR |= btn(GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
         if (GetGamepadButtonPressed() != GAMEPAD_BUTTON_UNKNOWN || dir != 0) gamepad = true;
     }
-    if (GetKeyPressed() != 0 || mouseMoved) gamepad = false;
+    if (!keysThisFrame.empty() || mouseMoved) gamepad = false;
+    if (nav.ok) okCount++;
     nav.any = nav.up || nav.down || nav.left || nav.right || nav.ok || nav.back || nav.tabL || nav.tabR;
 }
 
@@ -198,6 +201,13 @@ void Ui::star(Vector2 c, float r, Color col, bool filled) const {
     } else {
         for (int i = 0; i < 10; i++) line(pts[i], pts[(i + 1) % 10], std::fmax(1.5f, r * 0.14f), col);
     }
+}
+
+bool Ui::pressed(int key) const {
+    if (IsKeyPressed(key)) return true;
+    for (int k : keysThisFrame)
+        if (k == key) return true;
+    return false;
 }
 
 bool Ui::hover(Rectangle r) const { return CheckCollisionPointRec(mouse, r); }

@@ -35,6 +35,7 @@ std::string Game::command(const std::string& line) {
     }
     if (cmd == "state") return stateName(state);
     if (cmd == "frame") return std::to_string(frameNo);
+    if (cmd == "keys") return std::string("enter=") + (IsKeyDown(KEY_ENTER) ? "1" : "0") + " w=" + (IsKeyDown(KEY_W) ? "1" : "0") + " sel=" + std::to_string(sel) + " ok=" + std::to_string(ui.okCount) + " state=" + stateName(state);
     if (cmd == "waitstate") {
         // waitstate имя [кадров] — держит сценарий, пока не наступит состояние
         static int started = -1;

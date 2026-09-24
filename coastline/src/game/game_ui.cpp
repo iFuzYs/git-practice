@@ -718,7 +718,7 @@ void Game::drawMapTab(Rectangle area, bool full) {
     ui.text(buf, info.x + 24, info.y + 130, 20, pal::muted);
     Rectangle bt{info.x + 24, info.y + 180, info.width - 48, 46}, bw{info.x + 24, info.y + 236, info.width - 48, 46};
     bool travel = ui.button(bt, "Быстрое перемещение", true, 22);
-    bool mark = ui.button(bw, hasWaypoint && len(waypoint - p.p) < 1 ? "Снять метку" : "Поставить метку", false, 20) || IsKeyPressed(KEY_SPACE);
+    bool mark = ui.button(bw, hasWaypoint && len(waypoint - p.p) < 1 ? "Снять метку" : "Поставить метку", false, 20) || ui.pressed(KEY_SPACE);
     if (mark && !travel) {
         if (hasWaypoint && len(waypoint - p.p) < 1) hasWaypoint = false;
         else { waypoint = p.p; hasWaypoint = true; }
