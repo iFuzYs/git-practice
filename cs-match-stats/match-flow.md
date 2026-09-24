@@ -1,6 +1,6 @@
 # Поток запроса: получение матча
 
-Как `GET /matches/{matchId}` из `openapi.yaml` проходит через систему.
+Как `GET /matches/{matchId}` из [openapi.yaml](openapi.yaml) проходит через систему. Участники соответствуют контейнерам из [architecture.md](architecture.md).
 
 ```mermaid
 sequenceDiagram
