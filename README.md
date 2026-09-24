@@ -8,23 +8,31 @@
 
 Публичный API статистики матчей Counter-Strike 2 — от проблемы и требований до контракта и архитектурных решений.
 
-- [Обзор кейса](cs-match-stats/README.md): проблема, стейкхолдеры, скоуп, нефункциональные требования, открытые вопросы
+- [Обзор кейса](cs-match-stats/README.md): проблема, стейкхолдеры, скоуп, нефункциональные требования, вопросы к контракту и их решения
 - [Документация API (Swagger UI)](https://ifuzys.github.io/git-practice/)
-- Артефакты: [user stories с критериями в Gherkin](cs-match-stats/user-stories.md) · [C4](cs-match-stats/architecture.md) · [ER-модель](cs-match-stats/data-model.md) · [диаграмма состояний](cs-match-stats/match-lifecycle.md) · [sequence](cs-match-stats/match-flow.md) · [OpenAPI 3.0](cs-match-stats/openapi.yaml) · [ADR](cs-match-stats/adr/)
+- Артефакты: [user stories с критериями в Gherkin](cs-match-stats/user-stories.md) · [C4](cs-match-stats/architecture.md) · [ER-модель](cs-match-stats/data-model.md) · [диаграмма состояний](cs-match-stats/match-lifecycle.md) · [sequence](cs-match-stats/match-flow.md) · [OpenAPI 3.0](cs-match-stats/openapi.yaml) · [CHANGELOG](cs-match-stats/CHANGELOG.md) · [ADR](cs-match-stats/adr/)
 
 ### Заказ такси
 
 Процесс заказа такси от ввода адреса до оплаты.
 
-- [Sequence-диаграмма](taxi-order-flow.md): обмен сообщениями между сервисами
-- [BPMN 2.0](taxi-order-bpmn.md): участники, решения и варианты завершения процесса
+- [Обзор кейса](taxi-order/README.md): участники, навигация и диаграмма статусов заказа
+- [Sequence-диаграмма](taxi-order/taxi-order-flow.md): обмен сообщениями между сервисами
+- [BPMN 2.0](taxi-order/taxi-order-bpmn.md): участники, решения и варианты завершения процесса
+
+## FACEIT-дашборд
+
+Личная статистика в CS2 на FACEIT: винрейт по картам, форма по K/D и ADR, результаты по времени суток, последние матчи. Данные подтягиваются из FACEIT Data API раз в сутки.
+
+- [Дашборд](https://ifuzys.github.io/git-practice/faceit/)
+- [Как устроен и как настроить](faceit-dashboard/README.md)
 
 ## Автоматические проверки
 
 | Workflow | Когда запускается | Что делает |
 |---|---|---|
 | [OpenAPI lint](.github/workflows/openapi-lint.yml) | Pull request и push в `main` с изменениями спецификаций | Spectral проверяет `openapi.yaml` по правилам [.spectral.yaml](.spectral.yaml) |
-| [API docs](.github/workflows/api-docs.yml) | Push в `main` | Публикует Swagger UI на GitHub Pages |
+| [GitHub Pages](.github/workflows/pages.yml) | Push в `main` и каждый день в 06:00 МСК | Публикует Swagger UI и FACEIT-дашборд на GitHub Pages, на pull request проверяет сборку и тесты |
 
 ## Песочница
 

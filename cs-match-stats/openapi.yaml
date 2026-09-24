@@ -2,8 +2,11 @@ openapi: 3.0.3
 
 info:
   title: CS Match Stats API
-  description: Статистика матчей и команд по Counter-Strike.
-  version: 1.0.0
+  description: |
+    Статистика матчей и команд по Counter-Strike.
+
+    История изменений — в [CHANGELOG.md](https://github.com/iFuzYs/git-practice/blob/main/cs-match-stats/CHANGELOG.md).
+  version: 1.1.0
   contact:
     name: CS Match Stats
     url: https://github.com/iFuzYs/git-practice/tree/main/cs-match-stats
@@ -15,12 +18,18 @@ servers:
 tags:
   - name: Matches
     description: Расписание, live-счёт и результаты матчей
+  - name: Events
+    description: Справочник турниров
 
 paths:
   /matches:
     get:
       summary: Список матчей
-      description: Возвращает матчи с постраничной навигацией.
+      description: |
+        Возвращает матчи с постраничной навигацией.
+
+        Порядок задаёт параметр `sort`. При одинаковом `startsAt` матчи дополнительно
+        сортируются по `id`, поэтому страницы стабильны между запросами.
       operationId: listMatches
       tags: [Matches]
       parameters:
@@ -32,27 +41,23 @@ paths:
             $ref: '#/components/schemas/MatchStatus'
         - name: eventId
           in: query
-          description: Идентификатор турнира
+          description: Идентификатор турнира из `GET /events` или из поля `Match.eventId`
           required: false
           schema:
             type: string
-        - name: limit
+        - name: sort
           in: query
-          description: Сколько записей вернуть
+          description: |
+            Порядок сортировки:
+            - `startsAt` — от ранних к поздним, удобно для расписания;
+            - `-startsAt` — от поздних к ранним, удобно для результатов.
           required: false
           schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-        - name: offset
-          in: query
-          description: Смещение от начала выборки
-          required: false
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
+            type: string
+            enum: [startsAt, -startsAt]
+            default: -startsAt
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: Успешный ответ
@@ -86,13 +91,69 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /events:
+    get:
+      summary: Список турниров
+      description: |
+        Возвращает турниры от новых к старым: по `startDate`, при равенстве — по `id`.
+        Идентификаторы турниров используются в фильтре `eventId` у `GET /matches`.
+      operationId: listEvents
+      tags: [Events]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
 components:
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      description: Сколько записей вернуть
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    Offset:
+      name: offset
+      in: query
+      description: Смещение от начала выборки
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
   schemas:
     MatchStatus:
       type: string
-      description: Статус матча
+      description: |
+        Статус матча. Список значений может расширяться: клиенты должны обрабатывать
+        незнакомые значения, а не падать на них.
+
+        `cancelled` появляется в ответах не раньше 2026-10-24, через 30 дней после выхода v1.1
+        (решение — в ADR-0004).
       enum:
         - upcoming
+        - live
+        - finished
+        - cancelled
+
+    MapStatus:
+      type: string
+      description: Статус карты внутри серии
+      enum:
         - live
         - finished
 
@@ -113,14 +174,16 @@ components:
 
     MapResult:
       type: object
-      required: [name]
+      required: [name, status]
       properties:
         name:
           type: string
           example: Mirage
+        status:
+          $ref: '#/components/schemas/MapStatus'
         pickedBy:
           type: string
-          description: Идентификатор команды, выбравшей карту
+          description: Идентификатор команды, выбравшей карту. Не передаётся для десайдера.
           example: t-navi
         roundsTeam1:
           type: integer
@@ -142,6 +205,10 @@ components:
           type: string
           format: date-time
           example: '2026-07-31T18:00:00Z'
+        eventId:
+          type: string
+          description: Идентификатор турнира. Не передаётся для шоу-матчей.
+          example: iem-cologne-2026
         eventName:
           type: string
           example: IEM Cologne 2026
@@ -157,9 +224,22 @@ components:
           maxItems: 2
           items:
             $ref: '#/components/schemas/Team'
+        winnerTeamId:
+          type: string
+          description: Идентификатор команды-победителя. Передаётся только для статуса `finished`.
+          example: t-navi
+        forfeit:
+          type: boolean
+          description: |
+            Техническое поражение: победа присуждена без игры или без доигрывания серии.
+            Передаётся только для статуса `finished`.
+          default: false
+          example: false
         maps:
           type: array
-          description: Результаты по картам. Пустой массив, если матч ещё не начался.
+          description: |
+            Результаты по картам в порядке игры. Пустой массив, если матч ещё не начался,
+            отменён до старта или завершён техническим поражением без игры.
           items:
             $ref: '#/components/schemas/MapResult'
 
@@ -175,6 +255,38 @@ components:
           type: integer
           description: Всего записей, подходящих под фильтр
           example: 137
+
+    Event:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          example: iem-cologne-2026
+        name:
+          type: string
+          example: IEM Cologne 2026
+        startDate:
+          type: string
+          format: date
+          example: '2026-07-21'
+        endDate:
+          type: string
+          format: date
+          example: '2026-08-02'
+
+    EventList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        total:
+          type: integer
+          description: Всего турниров
+          example: 42
 
     Error:
       type: object
