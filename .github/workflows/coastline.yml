@@ -1,0 +1,69 @@
+name: COASTLINE
+
+on:
+  push:
+    paths:
+      - 'coastline/**'
+      - '.github/workflows/coastline.yml'
+  pull_request:
+    paths:
+      - 'coastline/**'
+      - '.github/workflows/coastline.yml'
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux + тесты симуляции
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Зависимости raylib
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libasound2-dev
+      - name: Сборка
+        run: |
+          cmake -S coastline -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j 4
+      - name: Тесты
+        run: ctest --test-dir build --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coastline-linux
+          path: build/coastline
+
+  windows:
+    name: Windows (exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Сборка
+        run: |
+          cmake -S coastline -B build
+          cmake --build build --config Release -j 4
+      - name: Тесты
+        run: ctest --test-dir build -C Release --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coastline-windows
+          path: build/Release/coastline.exe
+
+  web:
+    name: Браузер (WebAssembly)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+      - name: Сборка
+        run: |
+          emcmake cmake -S coastline -B build-web -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-web -j 4
+      - name: Упаковка
+        run: |
+          mkdir -p site
+          cp build-web/coastline.html site/index.html
+          cp build-web/coastline.js build-web/coastline.wasm site/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coastline-web
+          path: site

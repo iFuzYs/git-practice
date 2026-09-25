@@ -1,0 +1,6 @@
+build/
+build-*/
+cmake-build-*/
+coastline_save.txt
+*.png
+!assets/**
